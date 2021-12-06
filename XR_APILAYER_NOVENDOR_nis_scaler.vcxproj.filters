@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="NVIDIAImageScaling">
+      <UniqueIdentifier>{52396b2f-5ab4-456a-b7dd-c1d20f22e173}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NVIDIAImageScaling\NIS">
+      <UniqueIdentifier>{8b650162-35bc-4fc3-9789-b8c06636831f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NVIDIAImageScaling\DX11">
+      <UniqueIdentifier>{d45c3c40-bcb3-407f-b477-fcbcfd3cded1}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="loader_interfaces.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\NIS\NIS_Config.h">
+      <Filter>NVIDIAImageScaling\NIS</Filter>
+    </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\NIS\NIS_Scaler.h">
+      <Filter>NVIDIAImageScaling\NIS</Filter>
+    </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\samples\DX11\include\BilinearUpscale.h">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\samples\DX11\include\DeviceResources.h">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\samples\DX11\include\DXUtilities.h">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\samples\DX11\include\NVScaler.h">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\samples\common\Utilities.h">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NVIDIAImageScaling\samples\DX11\src\BilinearUpscale.cpp">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClCompile>
+    <ClCompile Include="NVIDIAImageScaling\samples\DX11\src\NVScaler.cpp">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClCompile>
+    <ClCompile Include="DeviceResources.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+    <None Include=".gitignore" />
+    <None Include="README.md" />
+    <None Include="Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1" />
+    <None Include="Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1" />
+    <None Include="XR_APILAYER_NOVENDOR_nis_scaler.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="NVIDIAImageScaling\NIS\NIS_Main.hlsl">
+      <Filter>NVIDIAImageScaling\NIS</Filter>
+    </FxCompile>
+  </ItemGroup>
+</Project>

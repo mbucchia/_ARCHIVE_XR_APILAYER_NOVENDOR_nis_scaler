@@ -1,0 +1,4 @@
+.vs/*
+packages/*
+x64/*
+*.vcxproj.user
