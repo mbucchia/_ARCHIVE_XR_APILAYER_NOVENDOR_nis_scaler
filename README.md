@@ -10,11 +10,13 @@ A ZIP file containing the necessary files to install and use the layer can be fo
 
 1. Create a folder in `%ProgramFiles%`. It's important to make it in `%ProgramFiles%` so that UWP applications can access it! For example: `C:\Program Files\OpenXR-API-Layers`.
 
-2. Place `XR_APILAYER_NOVENDOR_nis_scaler.json`, `XR_APILAYER_NOVENDOR_nis_scaler.dll`, `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` and `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1` in the folder created above.
+2. Place `XR_APILAYER_NOVENDOR_nis_scaler.json`, `XR_APILAYER_NOVENDOR_nis_scaler.dll`, `NIS_Main.hlsl`, `NIS_Scaler.h`, `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` and `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1` in the folder created above. Also copy any configuration file (eg: `FS2020.cfg`) to that folder.
 
 3. Run the script `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1`. You will be prompted for elevation (running as Administrator).
 
-4. Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. A layer named `XR_APILAYER_NOVENDOR_nis_scaler` should be listed.
+Several people have reported issues with the script failing to run due to some Windows policies.  For now the workaround to this issue is to create a registry key `HKLM\Software\Khronos\OpenXR\1\ApiLayers\Implicit`, then under this path create a DWORD value with the full path to the `XR_APILAYER_NOVENDOR_nis_scaler.json` file and a value 0.
+
+4. (Optional) Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. A layer named `XR_APILAYER_NOVENDOR_nis_scaler` should be listed.
 
 ## Removal
 
@@ -22,7 +24,7 @@ A ZIP file containing the necessary files to install and use the layer can be fo
 
 2. Run the script `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1`. You will be prompted for elevation (running as Administrator).
 
-3. Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. There should be no layer named `XR_APILAYER_NOVENDOR_nis_scaler`.
+3. (Optional) Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. There should be no layer named `XR_APILAYER_NOVENDOR_nis_scaler`.
 
 ## App configuration
 
@@ -66,6 +68,7 @@ You can use Ctrl + Left arrow (or Ctrl + F1) to enable/disable NIS and switch to
 
 This OpenXR API layer is currently very limited in the mode and input it accepts:
 
+* Only Windows Mixed Reality is working (but I am trying really hard to make it work with SteamVR);
 * Only Direct3D 11 is supported;
 * Not all swapchain formats are not supported (exact list TBD);
 * Cropped imageRect submission is not supported;
