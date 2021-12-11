@@ -56,6 +56,12 @@ XR_APILAYER_NOVENDOR_nis_scaler layer is active
 Loading config for "FS2020"
 ```
 
+## Keyboard shortcuts
+
+Changing the sharpness can be done in increments of 5% by pressing Ctrl + Down arrow (or Ctrl + F2) to decrease and Ctrl + Up arrow (or Ctrl + F3) to increase. The new sharpness value can be observed in the log file (see README). When satisfied, you may then modify the config file to make it permanent.
+
+You can use Ctrl + Left arrow (or Ctrl + F1) to enable/disable NIS and switch to a bilinear scaler (cheap scaler) instead, so you can see the improvements (hopefully) that NIS provides.
+
 ## Limitations
 
 This OpenXR API layer is currently very limited in the mode and input it accepts:

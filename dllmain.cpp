@@ -66,6 +66,9 @@ namespace {
     std::unordered_map<XrSwapchain, std::vector<ScalerResources>> d3d11TextureMap;
     std::unordered_map<XrSwapchain, uint32_t> swapchainIndices;
 
+    bool useBilinearScaler = false;
+    float newSharpness;
+
     void Log(const char* fmt, ...);
 
     struct {
@@ -388,6 +391,9 @@ namespace {
             {
                 Log("Application does not use D3D11.\n");
             }
+
+            useBilinearScaler = false;
+            newSharpness = config.sharpness;
         }
 
         DebugLog("<-- NISScaler_xrCreateSession %d\n", result);
@@ -454,13 +460,11 @@ namespace {
 
             if (isHandled)
             {
-                if (isSupportedDepthFormat)
                 {
                     auto scaler = std::make_shared<BilinearUpscale>(deviceResources);
                     scaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     bilinearScaler.insert_or_assign(*swapchain, scaler);
                 }
-                if (isSupportedColorFormat)
                 {
                     auto scaler = std::make_shared<NVScaler>(deviceResources, dllHome);
                     scaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
@@ -523,7 +527,7 @@ namespace {
             if (useD3D11)
             {
                 XrSwapchainImageD3D11KHR* d3dImages = reinterpret_cast<XrSwapchainImageD3D11KHR*>(images);
-                XrSwapchainCreateInfo& imageInfo = swapchainInfo.find(swapchain)->second;
+                const XrSwapchainCreateInfo& imageInfo = swapchainInfo.find(swapchain)->second;
                 for (uint32_t i = 0; i < *imageCountOutput; i++)
                 {
                     ScalerResources resources;
@@ -627,6 +631,33 @@ namespace {
     {
         DebugLog("--> NISScaler_xrEndFrame\n");
 
+        // Check keyboard input.
+        static bool wasF1Pressed = false;
+        const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
+        if (!wasF1Pressed && isF1Pressed)
+        {
+            useBilinearScaler = !useBilinearScaler;
+        }
+        wasF1Pressed = isF1Pressed;
+
+        static bool wasF2Pressed = false;
+        const bool isF2Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_DOWN) || GetAsyncKeyState(VK_F2));
+        if (!wasF2Pressed && isF2Pressed)
+        {
+            newSharpness = max(0.f, newSharpness - 0.05f);
+            Log("sharpness=%.3f\n", newSharpness);
+        }
+        wasF2Pressed = isF2Pressed;
+
+        static bool wasF3Pressed = false;
+        const bool isF3Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_UP) || GetAsyncKeyState(VK_F3));
+        if (!wasF3Pressed && isF3Pressed)
+        {
+            newSharpness = min(1.f, newSharpness + 0.05f);
+            Log("sharpness=%.3f\n", newSharpness);
+        }
+        wasF3Pressed = isF3Pressed;
+
         // Go through each projection layer.
         std::vector<const XrCompositionLayerBaseHeader*> layers(frameEndInfo->layerCount);
         for (uint32_t i = 0; i < frameEndInfo->layerCount; i++)
@@ -647,10 +678,27 @@ namespace {
                     // Perform upscaling.
                     if (useD3D11)
                     {
+                        // Adjust the scaler if needed.
+                        if (abs(config.sharpness - newSharpness) > FLT_EPSILON)
+                        {
+                            const XrSwapchainCreateInfo& imageInfo = swapchainInfo.find(view.subImage.swapchain)->second;
+
+                            bilinearScaler[view.subImage.swapchain]->update(imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
+                            NISScaler[view.subImage.swapchain]->update(newSharpness, imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
+                            config.sharpness = newSharpness;
+                        }
+
                         ScalerResources& colorResources = d3d11TextureMap[view.subImage.swapchain][swapchainIndices[view.subImage.swapchain]];
                         ID3D11ShaderResourceView* srv = colorResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
                         ID3D11UnorderedAccessView* uav = colorResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
-                        NISScaler[view.subImage.swapchain]->dispatch(&srv, &uav);
+                        if (!useBilinearScaler)
+                        {
+                            NISScaler[view.subImage.swapchain]->dispatch(&srv, &uav);
+                        }
+                        else
+                        {
+                            bilinearScaler[view.subImage.swapchain]->dispatch(&srv, &uav);
+                        }
                         deviceResources.context()->OMSetRenderTargets(0, nullptr, nullptr);
 
                         // TODO: This is non-compliant AND dangerous.
