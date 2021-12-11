@@ -53,6 +53,7 @@ namespace {
     uint32_t actualDisplayHeight;
     ComPtr<ID3D11Device> d3d11Device = nullptr;
     DeviceResources deviceResources;
+    DXGI_FORMAT indirectFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     std::unordered_map<XrSwapchain, std::shared_ptr<BilinearUpscale>> bilinearScaler;
     std::unordered_map<XrSwapchain, std::shared_ptr<NVScaler>> NISScaler;
     std::unordered_map<XrSwapchain, XrSwapchainCreateInfo> swapchainInfo;
@@ -462,7 +463,7 @@ namespace {
             if (isIndirectlySupportedColorFormat)
             {
                 // Fallback to the most generic format.
-                chainCreateInfo.format = (uint64_t)DXGI_FORMAT_R8G8B8A8_UNORM;
+                chainCreateInfo.format = (uint64_t)indirectFormat;
                 Log("Using indirect texture format\n");
             }
         }
@@ -475,6 +476,8 @@ namespace {
             {
                 try
                 {
+                    // Create the scalers.
+                    // TODO: Add an option to disable the bilinear scaler and save memory.
                     {
                         auto scaler = std::make_shared<BilinearUpscale>(deviceResources);
                         scaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
@@ -609,7 +612,7 @@ namespace {
                             }
                             else
                             {
-                                uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                                uavDesc.Format = indirectFormat;
                             }
                             uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
                             uavDesc.Texture2DArray.MipSlice = 0;
@@ -724,9 +727,9 @@ namespace {
                             config.sharpness = newSharpness;
                         }
 
-                        ScalerResources& colorResources = d3d11TextureMap[view.subImage.swapchain][swapchainIndices[view.subImage.swapchain]];
-                        ID3D11ShaderResourceView* srv = colorResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
-                        ID3D11UnorderedAccessView* uav = colorResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
+                        const ScalerResources& colorResources = d3d11TextureMap[view.subImage.swapchain][swapchainIndices[view.subImage.swapchain]];
+                        ID3D11ShaderResourceView* const srv = colorResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
+                        ID3D11UnorderedAccessView* const uav = colorResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
                         if (!useBilinearScaler)
                         {
                             NISScaler[view.subImage.swapchain]->dispatch(&srv, &uav);
