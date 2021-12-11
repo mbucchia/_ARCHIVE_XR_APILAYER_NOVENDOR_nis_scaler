@@ -82,6 +82,18 @@ namespace {
         {
             if (loaded)
             {
+                const bool isDebugBuild =
+#ifdef _DEBUG
+                    true;
+#else
+                    false;
+#endif
+                if (isDebugBuild)
+                {
+                    Log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+                    Log("!!! USING DEBUG SETTINGS - PERFORMANCE WILL BE DECREASED             !!!\n");
+                    Log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+                }
                 if (onlyAdvertiseCapableFormats)
                 {
                     Log("Only advertise texture formats supported by this layer\n");
@@ -178,11 +190,11 @@ namespace {
 
                         if (name == "scaling")
                         {
-                            config.scaleFactor = std::stof(value);
+                            config.scaleFactor = std::clamp(std::stof(value), 0.f, 1.f);
                         }
                         else if (name == "sharpness")
                         {
-                            config.sharpness = std::stof(value);
+                            config.sharpness = std::clamp(std::stof(value), 0.f, 1.f);
                         }
                         else if (name == "only_advertise_capable_formats")
                         {
@@ -372,8 +384,6 @@ namespace {
                     // Keep track of the D3D device.
                     const XrGraphicsBindingD3D11KHR* d3dBindings = reinterpret_cast<const XrGraphicsBindingD3D11KHR*>(entry);
                     d3d11Device = d3dBindings->device;
-
-                    // Create scaler resources.
                     deviceResources.create(reinterpret_cast<HWND>(d3d11Device.Get()));
                 }
                 else if (entry->type == XR_TYPE_GRAPHICS_BINDING_D3D12_KHR)
@@ -413,6 +423,7 @@ namespace {
             // Cleanup all the scaler's resources.
             NISScaler.clear();
             bilinearScaler.clear();
+            deviceResources.create(nullptr);
             d3d11Device = nullptr;
         }
 
@@ -427,6 +438,9 @@ namespace {
         XrSwapchain* const swapchain)
     {
         DebugLog("--> NISScaler_xrCreateSwapchain\n");
+
+        // This function is the most likely to fail due to OpenXR runtime variations, GPU variations etc...
+        // Add extra logging in here.
 
         XrSwapchainCreateInfo chainCreateInfo = *createInfo;
 
@@ -457,30 +471,40 @@ namespace {
         const XrResult result = next_xrCreateSwapchain(session, &chainCreateInfo, swapchain);
         if (result == XR_SUCCESS)
         {
-
             if (isHandled)
             {
+                try
                 {
-                    auto scaler = std::make_shared<BilinearUpscale>(deviceResources);
-                    scaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
-                    bilinearScaler.insert_or_assign(*swapchain, scaler);
+                    {
+                        auto scaler = std::make_shared<BilinearUpscale>(deviceResources);
+                        scaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
+                        bilinearScaler.insert_or_assign(*swapchain, scaler);
+                    }
+                    {
+                        auto scaler = std::make_shared<NVScaler>(deviceResources, dllHome);
+                        scaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
+                        NISScaler.insert_or_assign(*swapchain, scaler);
+                    }
+
+                    // We keep track of the (real) swapchain info for when we intercept the textures in xrEnumerateSwapchainImages().
+                    swapchainInfo.insert_or_assign(*swapchain, *createInfo);
+
+                    // We will keep track of the textures we distribute to the app.
+                    d3d11TextureMap.insert_or_assign(*swapchain, std::vector<ScalerResources>());
                 }
+                catch (std::runtime_error exc)
                 {
-                    auto scaler = std::make_shared<NVScaler>(deviceResources, dllHome);
-                    scaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
-                    NISScaler.insert_or_assign(*swapchain, scaler);
+                    Log("Error: %s\n", exc.what());
                 }
-
-                // We keep track of the (real) swapchain info for when we intercept the textures in xrEnumerateSwapchainImages().
-                swapchainInfo.insert_or_assign(*swapchain, *createInfo);
-
-                // We will keep track of the textures we distribute to the app.
-                d3d11TextureMap.insert_or_assign(*swapchain, std::vector<ScalerResources>());
             }
             else
             {
                 Log("Swapchain with format %d and array size %u is not supported.\n", createInfo->format, createInfo->arraySize);
             }
+        }
+        else
+        {
+            Log("xrCreateSwapchain failed with %d\n", result);
         }
 
         DebugLog("<-- NISScaler_xrCreateSwapchain %d\n", result);
@@ -520,83 +544,93 @@ namespace {
     {
         DebugLog("--> NISScaler_xrEnumerateSwapchainImages\n");
 
+        // This function is the most likely to fail due to OpenXR runtime variations, GPU variations etc...
+        // Add extra logging in here.
+
         // Call the chain to perform the actual operation.
         const XrResult result = next_xrEnumerateSwapchainImages(swapchain, imageCapacityInput, imageCountOutput, images);
         if (result == XR_SUCCESS && IsSwapchainHandled(swapchain) && imageCapacityInput > 0)
         {
-            if (useD3D11)
+            try
             {
-                XrSwapchainImageD3D11KHR* d3dImages = reinterpret_cast<XrSwapchainImageD3D11KHR*>(images);
-                const XrSwapchainCreateInfo& imageInfo = swapchainInfo.find(swapchain)->second;
-                for (uint32_t i = 0; i < *imageCountOutput; i++)
+                if (useD3D11)
                 {
-                    ScalerResources resources;
-                    resources.runtimeTexture = d3dImages[i].texture;
+                    XrSwapchainImageD3D11KHR* d3dImages = reinterpret_cast<XrSwapchainImageD3D11KHR*>(images);
+                    const XrSwapchainCreateInfo& imageInfo = swapchainInfo.find(swapchain)->second;
+                    for (uint32_t i = 0; i < *imageCountOutput; i++)
+                    {
+                        ScalerResources resources;
+                        resources.runtimeTexture = d3dImages[i].texture;
 
-                    // Create the texture that the app will render to.
-                    D3D11_TEXTURE2D_DESC textureDesc;
-                    ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
-                    textureDesc.Width = imageInfo.width;
-                    textureDesc.Height = imageInfo.height;
-                    textureDesc.MipLevels = imageInfo.mipCount;
-                    textureDesc.ArraySize = imageInfo.arraySize;
-                    textureDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                    textureDesc.SampleDesc.Count = imageInfo.sampleCount;
-                    textureDesc.Usage = D3D11_USAGE_DEFAULT;
-                    if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT)
-                    {
-                        textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
-                    }
-                    if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                    {
-                        textureDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-                    }
-                    if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_UNORDERED_ACCESS_BIT)
-                    {
-                        textureDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
-                    }
-                    // This flag is needed for the scaler.
-                    textureDesc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
-                    DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, resources.appTexture.GetAddressOf()));
-
-                    // Create the views needed by the scalers.
-                    for (uint32_t j = 0; j < imageInfo.arraySize; j++)
-                    {
-                        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-                        ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
-                        srvDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                        srvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_SRV_DIMENSION_TEXTURE2D : D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-                        srvDesc.Texture2DArray.MostDetailedMip = 0;
-                        srvDesc.Texture2DArray.MipLevels = imageInfo.mipCount;
-                        srvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
-                        srvDesc.Texture2DArray.FirstArraySlice = j;
-                        DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(resources.appTexture.Get(), &srvDesc, resources.appTextureSrv[j].GetAddressOf()));
-
-                        D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-                        ZeroMemory(&uavDesc, sizeof(D3D11_UNORDERED_ACCESS_VIEW_DESC));
-                        if (!IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format))
+                        // Create the texture that the app will render to.
+                        D3D11_TEXTURE2D_DESC textureDesc;
+                        ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
+                        textureDesc.Width = imageInfo.width;
+                        textureDesc.Height = imageInfo.height;
+                        textureDesc.MipLevels = imageInfo.mipCount;
+                        textureDesc.ArraySize = imageInfo.arraySize;
+                        textureDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                        textureDesc.SampleDesc.Count = imageInfo.sampleCount;
+                        textureDesc.Usage = D3D11_USAGE_DEFAULT;
+                        if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT)
                         {
-                            uavDesc.Format = (DXGI_FORMAT)imageInfo.format;;
+                            textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
                         }
-                        else
+                        if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
                         {
-                            uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                            textureDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
                         }
-                        uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
-                        uavDesc.Texture2DArray.MipSlice = 0;
-                        uavDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
-                        uavDesc.Texture2DArray.FirstArraySlice = j;
-                        DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(resources.runtimeTexture, &uavDesc, resources.runtimeTextureUav[0].GetAddressOf()));
-                    }
+                        if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_UNORDERED_ACCESS_BIT)
+                        {
+                            textureDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+                        }
+                        // This flag is needed for the scaler.
+                        textureDesc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+                        DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, resources.appTexture.GetAddressOf()));
 
-                    // Let the app use our downscaled texture and keep track of the resources to use during xrEndFrame().
-                    d3d11TextureMap[swapchain].push_back(resources);
-                    d3dImages[i].texture = resources.appTexture.Get();
+                        // Create the views needed by the scalers.
+                        for (uint32_t j = 0; j < imageInfo.arraySize; j++)
+                        {
+                            D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+                            ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
+                            srvDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                            srvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_SRV_DIMENSION_TEXTURE2D : D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                            srvDesc.Texture2DArray.MostDetailedMip = 0;
+                            srvDesc.Texture2DArray.MipLevels = imageInfo.mipCount;
+                            srvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                            srvDesc.Texture2DArray.FirstArraySlice = j;
+                            DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(resources.appTexture.Get(), &srvDesc, resources.appTextureSrv[j].GetAddressOf()));
+
+                            D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+                            ZeroMemory(&uavDesc, sizeof(D3D11_UNORDERED_ACCESS_VIEW_DESC));
+                            if (!IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format))
+                            {
+                                uavDesc.Format = (DXGI_FORMAT)imageInfo.format;;
+                            }
+                            else
+                            {
+                                uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                            }
+                            uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
+                            uavDesc.Texture2DArray.MipSlice = 0;
+                            uavDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                            uavDesc.Texture2DArray.FirstArraySlice = j;
+                            DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(resources.runtimeTexture, &uavDesc, resources.runtimeTextureUav[0].GetAddressOf()));
+                        }
+
+                        // Let the app use our downscaled texture and keep track of the resources to use during xrEndFrame().
+                        d3d11TextureMap[swapchain].push_back(resources);
+                        d3dImages[i].texture = resources.appTexture.Get();
+                    }
+                }
+                else if (useD3D12)
+                {
+                    // TODO: Support D3D12.
                 }
             }
-            else if (useD3D12)
+            catch (std::runtime_error exc)
             {
-                // TODO: Support D3D12.
+                Log("Error: %s\n", exc.what());
             }
         }
 
@@ -632,31 +666,33 @@ namespace {
         DebugLog("--> NISScaler_xrEndFrame\n");
 
         // Check keyboard input.
-        static bool wasF1Pressed = false;
-        const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
-        if (!wasF1Pressed && isF1Pressed)
         {
-            useBilinearScaler = !useBilinearScaler;
-        }
-        wasF1Pressed = isF1Pressed;
+            static bool wasF1Pressed = false;
+            const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
+            if (!wasF1Pressed && isF1Pressed)
+            {
+                useBilinearScaler = !useBilinearScaler;
+            }
+            wasF1Pressed = isF1Pressed;
 
-        static bool wasF2Pressed = false;
-        const bool isF2Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_DOWN) || GetAsyncKeyState(VK_F2));
-        if (!wasF2Pressed && isF2Pressed)
-        {
-            newSharpness = max(0.f, newSharpness - 0.05f);
-            Log("sharpness=%.3f\n", newSharpness);
-        }
-        wasF2Pressed = isF2Pressed;
+            static bool wasF2Pressed = false;
+            const bool isF2Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_DOWN) || GetAsyncKeyState(VK_F2));
+            if (!wasF2Pressed && isF2Pressed)
+            {
+                newSharpness = max(0.f, newSharpness - 0.05f);
+                Log("sharpness=%.3f\n", newSharpness);
+            }
+            wasF2Pressed = isF2Pressed;
 
-        static bool wasF3Pressed = false;
-        const bool isF3Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_UP) || GetAsyncKeyState(VK_F3));
-        if (!wasF3Pressed && isF3Pressed)
-        {
-            newSharpness = min(1.f, newSharpness + 0.05f);
-            Log("sharpness=%.3f\n", newSharpness);
+            static bool wasF3Pressed = false;
+            const bool isF3Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_UP) || GetAsyncKeyState(VK_F3));
+            if (!wasF3Pressed && isF3Pressed)
+            {
+                newSharpness = min(1.f, newSharpness + 0.05f);
+                Log("sharpness=%.3f\n", newSharpness);
+            }
+            wasF3Pressed = isF3Pressed;
         }
-        wasF3Pressed = isF3Pressed;
 
         // Go through each projection layer.
         std::vector<const XrCompositionLayerBaseHeader*> layers(frameEndInfo->layerCount);

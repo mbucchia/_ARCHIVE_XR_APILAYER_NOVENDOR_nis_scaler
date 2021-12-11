@@ -33,6 +33,13 @@
 void DeviceResources::create(HWND hWnd, uint32_t adapterIdx)
 {
     m_d3dDevice = reinterpret_cast<ID3D11Device*>(hWnd);
+    if (!m_d3dDevice)
+    {
+        m_d3dContext = nullptr;
+        m_initialized = false;
+        return;
+    }
+
     m_d3dDevice->GetImmediateContext(m_d3dContext.ReleaseAndGetAddressOf());
     m_initialized = true;
 }
@@ -135,20 +142,20 @@ void DeviceResources::createUAV(ID3D11Resource* pResource, DXGI_FORMAT format, I
 
 void DeviceResources::initRenderTarget()
 {
-	abort();
+    abort();
 }
 
 void DeviceResources::resizeRenderTarget(uint32_t Width, uint32_t Height, DXGI_FORMAT format)
 {
-	abort();
+    abort();
 }
 
 void DeviceResources::clearRenderTargetView(const float color[4])
 {
-	abort();
+    abort();
 }
 
 void DeviceResources::getTextureData(ID3D11Texture2D* texture, uint8_t* data)
 {
-	abort();
+    abort();
 }
