@@ -66,9 +66,8 @@ You can use Ctrl + Left arrow (or Ctrl + F1) to enable/disable NIS and switch to
 
 This OpenXR API layer is currently very limited in the mode and input it accepts:
 
-* Only Windows Mixed Reality is working (but I am trying really hard to make it work with SteamVR);
 * Only Direct3D 11 is supported;
-* Not all swapchain formats are not supported (exact list TBD);
+* Not all swapchain formats are supported (exact list TBD);
 * Cropped imageRect submission is not supported;
 * Depth submission is not supported.
 

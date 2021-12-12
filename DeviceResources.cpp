@@ -60,6 +60,7 @@ void DeviceResources::createSRV(ID3D11Resource* pResource, DXGI_FORMAT format, I
 void DeviceResources::createLinearClampSampler(ID3D11SamplerState** ppSampleState)
 {
     D3D11_SAMPLER_DESC samplerDesc;
+    ZeroMemory(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
     samplerDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
     samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
     samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -74,6 +75,7 @@ void DeviceResources::createLinearClampSampler(ID3D11SamplerState** ppSampleStat
 void DeviceResources::createTexture2D(int w, int h, DXGI_FORMAT format, D3D11_USAGE heapType, const void* data, uint32_t rowPitch, uint32_t imageSize, ID3D11Texture2D** ppTexture2D)
 {
     D3D11_TEXTURE2D_DESC desc;
+    ZeroMemory(&desc, sizeof(D3D11_TEXTURE2D_DESC));
     desc.Width = w;
     desc.Height = h;
     desc.MipLevels = 1;
@@ -121,6 +123,7 @@ void DeviceResources::updateConstBuffer(void* data, uint32_t size, ID3D11Buffer*
 void DeviceResources::createConstBuffer(void* initialData, uint32_t size, ID3D11Buffer** ppBuffer)
 {
     D3D11_BUFFER_DESC bDesc;
+    ZeroMemory(&bDesc, sizeof(D3D11_BUFFER_DESC));
     bDesc.ByteWidth = size;
     bDesc.Usage = D3D11_USAGE_DYNAMIC;
     bDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
