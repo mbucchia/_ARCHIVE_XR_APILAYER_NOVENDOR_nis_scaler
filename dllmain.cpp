@@ -144,7 +144,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         {
             loaded = false;
             scaleFactor = 0.7f;
-            sharpness = 1.0f;
+            sharpness = 0.5f;
             onlyAdvertiseCapableFormats = false;
             prioritizeCapableFormats = true;
         }

@@ -2,15 +2,27 @@
 
 This software inserts an NVIDIA Image Scaling (NIS) shader in the frame submission path of any OpenXR application.
 
+The NIS scaling can be used instead of the application render scale setting (if available) or the OpenXR custom render scale to either:
+
+- Achieve better visual quality without lowering performance;
+- Achieve better performance with minimal visual quality loss (compared to the traditional render scale settings).
+
+DISCLAIMER: This software is distributed as-is, without any warranties or conditions of any kind. Use at your own risks.
+
+## Requirements
+
+This software may be used with any brand of VR headset as long as the target application is developed using OpenXR. The software has been confirmed to work with Windows Mixed Reality, Valve Index, HTC Vive, Pimax and Oculus Quest.
+This software may be used with any modern GPU, and is not limited to NVIDIA hardware.
+
 ## Download
 
-A ZIP file containing the necessary files to install and use the layer can be found on the release page: https://github.com/mbucchia/XR_APILAYER_NOVENDOR_nis_scaler/releases.
+A ZIP archive containing the necessary files to install and use the layer can be found on the release page: https://github.com/mbucchia/XR_APILAYER_NOVENDOR_nis_scaler/releases.
 
 ## Setup
 
 1. Create a folder in `%ProgramFiles%`. It's important to make it in `%ProgramFiles%` so that UWP applications can access it! For example: `C:\Program Files\OpenXR-API-Layers`.
 
-2. Place `XR_APILAYER_NOVENDOR_nis_scaler.json`, `XR_APILAYER_NOVENDOR_nis_scaler.dll`, `NIS_Main.hlsl`, `NIS_Scaler.h`, `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` and `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1` in the folder created above. Also copy any configuration file (eg: `FS2020.cfg`) to that folder.
+2. Place the files extracted from the ZIP archive (`XR_APILAYER_NOVENDOR_nis_scaler.json`, `XR_APILAYER_NOVENDOR_nis_scaler.dll`, `NIS_Main.hlsl`, `NIS_Scaler.h`, `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` and `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1`) in the folder created above. Also copy any configuration file (eg: `FS2020.cfg`) to that folder.
 
 3. Run the script `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1`. You will be prompted for elevation (running as Administrator).
 
@@ -26,11 +38,13 @@ A ZIP file containing the necessary files to install and use the layer can be fo
 
 ## App configuration
 
-1. First, retrieve the name that the application passes to OpenXR. In order to do that, run the application while the API layer is enabled.
+In order to enable the software for a given application (eg: Microsoft Flight Simulator 2020 aka MSFS2020), a configuration file must be present for this application.
 
-2. Locate the log file for the layer. It will typically be `%LocalAppData%\XR_APILAYER_NOVENDOR_nis_scaler.log`.
+1. Each application registers itself with a name. The first step is to retrieve the name that the application passes to OpenXR. In order to do that, follow the setup instructions above to install the software, then run the application you wish to enable NIS scaling for. In this example, we start MSFS2020.
 
-3. In the log file, search for the first line saying "Could not load config for ...":
+2. Locate the log file for the software. It will typically be stored at `%LocalAppData%\XR_APILAYER_NOVENDOR_nis_scaler.log`.
+
+3. In the log file, search for the first line reading "Could not load config for ...". The name specified on this line is the application name.
 
 ```
 dllHome is "C:\Program Files\OpenXR-API-Layers"
@@ -39,35 +53,30 @@ Could not load config for "FS2020"
 Could not load config for "Zouna"
 ```
 
-4. In the same folder where `XR_APILAYER_NOVENDOR_nis_scaler.json` was copied during setup, create a file with a name matching the application name, and with the extension `.cfg`. For example `C:\Program Files\OpenXR-API-Layers\FS2020.cfg`.
+4. In the same folder where `XR_APILAYER_NOVENDOR_nis_scaler.json` was copied during setup, create a file with a name matching the application name and with the extension `.cfg`. For our example `C:\Program Files\OpenXR-API-Layers\FS2020.cfg`.
 
-Example with scaling factor of 50% and sharpness of 80%:
-
-```
-scaling=0.5
-sharpness=0.8
-```
-
-5. When running the application, the changes should take affect. Inspect the log file if it needs to be confirmed:
+5. (Optional) In this configuration file, you may change the `scaling` value to specify the amount of upscaling to request (default is 0.7, which means 70%). You may also specify a value for `sharpness` between 0 and 1 (default is 0.5). Example configuration file with a scaling factor of 65% and sharpness of 40%:
 
 ```
-dllHome is "C:\Program Files\OpenXR-API-Layers"
-XR_APILAYER_NOVENDOR_nis_scaler layer is active
-Loading config for "FS2020"
+scaling=0.65
+sharpness=0.4
 ```
 
 ## Keyboard shortcuts
 
-Changing the sharpness can be done in increments of 5% by pressing Ctrl + Down arrow (or Ctrl + F2) to decrease and Ctrl + Up arrow (or Ctrl + F3) to increase. The new sharpness value can be observed in the log file (see README). When satisfied, you may then modify the config file to make it permanent.
+Changing the sharpness setting can be done in increments of 5% by pressing Ctrl + Down arrow (or Ctrl + F2) to decrease and Ctrl + Up arrow (or Ctrl + F3) to increase. The new sharpness value can be observed in the log file (typically stored at `%LocalAppData%\XR_APILAYER_NOVENDOR_nis_scaler.log`). When satisfied, you may then modify the configuration file corresponding to the application to make the setting permanent.
 
 You can use Ctrl + Left arrow (or Ctrl + F1) to enable/disable NIS and switch to a bilinear scaler (cheap scaler) instead, so you can see the improvements (hopefully) that NIS provides.
 
+Changing the render scale cannot be done via a keyboard shortcut and requires the VR session to be restarted with an updated configuration file.
+
 ## Limitations
 
-This OpenXR API layer is currently very limited in the mode and input it accepts:
+This OpenXR API layer is currently very limited in the mode and input that it accepts:
 
+* This software was only extensively tested with Microsoft Flight Simulator;
 * Only Direct3D 11 is supported;
-* Not all swapchain formats are supported (exact list TBD);
+* Not all swapchain formats are supported (exact list TBD) and some properties are untested (arraySize, sampleCount);
 * Cropped imageRect submission is not supported;
 * Depth submission is not supported.
 
@@ -75,7 +84,8 @@ This OpenXR API layer is currently very limited in the mode and input it accepts
 
 The author is Matthieu Bucchianeri (https://github.com/mbucchia/). Please note that this software is not affiliated with Microsoft.
 
-Special thanks to BufordTX for spotting my bug in the installation script.
+Special thanks to BufordTX for submitting a fix for a bug in the installation script.
+
 Special thanks to CptLucky8 for spotting an issue with the instructions.
 
 Many thanks to the https://forums.flightsimulator.com/ community for the testing and feedback!
