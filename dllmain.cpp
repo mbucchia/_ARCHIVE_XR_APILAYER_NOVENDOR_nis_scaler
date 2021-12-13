@@ -27,6 +27,7 @@ namespace {
     using Microsoft::WRL::ComPtr;
 
     const std::string LayerName = "XR_APILAYER_NOVENDOR_nis_scaler";
+    const std::string VersionString = "Alpha4";
 
     const std::string colorConversionShadersSource = R"_(
 Texture2D srcTex;
@@ -1121,7 +1122,7 @@ extern "C" {
 
         DebugLog("<-- NISScaler_xrNegotiateLoaderApiLayerInterface\n");
 
-        Log("%s layer is active\n", LayerName.c_str());
+        Log("%s layer (%s) is active\n", LayerName.c_str(), VersionString.c_str());
 
         return XR_SUCCESS;
     }
