@@ -15,7 +15,7 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{92e50b91-2fa3-48a0-b7f7-e04d7790e15b}</ProjectGuid>
-    <RootNamespace>XRAPILAYERNOVENDORfovmodifier</RootNamespace>
+    <RootNamespace>XRAPILAYERNOVENDORnisscaler</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ProjectName>XR_APILAYER_NOVENDOR_nis_scaler</ProjectName>
   </PropertyGroup>
@@ -57,7 +57,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>XR_USE_GRAPHICS_API_D3D11;_CRT_SECURE_NO_WARNINGS;_DEBUG;XRAPILAYERNOVENDORFOVMODIFIER_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>XR_USE_GRAPHICS_API_D3D11;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -78,7 +78,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>XR_USE_GRAPHICS_API_D3D11;_CRT_SECURE_NO_WARNINGS;NDEBUG;XRAPILAYERNOVENDORFOVMODIFIER_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>XR_USE_GRAPHICS_API_D3D11;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
