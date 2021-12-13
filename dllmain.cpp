@@ -65,37 +65,53 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     PFN_xrAcquireSwapchainImage next_xrAcquireSwapchainImage = nullptr;
     PFN_xrEndFrame next_xrEndFrame = nullptr;
 
-    // State of the layer
-    bool useD3D11 = false;
-    bool useD3D12 = false;
+    // Device state.
     uint32_t actualDisplayWidth;
     uint32_t actualDisplayHeight;
     ComPtr<ID3D11Device> d3d11Device = nullptr;
     DeviceResources deviceResources;
+
+    // Scalers state and resources.
     DXGI_FORMAT indirectFormat = DXGI_FORMAT_UNKNOWN;
-    std::unordered_map<XrSwapchain, std::shared_ptr<BilinearUpscale>> bilinearScaler;
-    std::unordered_map<XrSwapchain, std::shared_ptr<NVScaler>> NISScaler;
-    std::unordered_map<XrSwapchain, XrSwapchainCreateInfo> swapchainInfo;
-    struct ScalerResources
+    struct SwapchainImageResources
     {
-        // Common resources.
-        ID3D11Texture2D* runtimeTexture;
+        // Resources needed by the scaler.
         ComPtr<ID3D11UnorderedAccessView> runtimeTextureUav[2];
         ComPtr<ID3D11Texture2D> appTexture;
         ComPtr<ID3D11ShaderResourceView> appTextureSrv[2];
 
         // Resources for indirect color conversion mode.
         ComPtr<ID3D11RenderTargetView> runtimeTextureRtv[2];
+
+        // The original texture returned by OpenXR.
+        ID3D11Texture2D* runtimeTexture;
+    };
+    struct ScalerResources
+    {
+        // The swapchain info as requested by the application.
+        XrSwapchainCreateInfo swapchainInfo;
+
+        // Scaler processors.
+        std::shared_ptr<BilinearUpscale> bilinearScaler;
+        std::shared_ptr<NVScaler> NISScaler;
+
+        // Common resources for indirect color conversion mode.
         ComPtr<ID3D11Texture2D> intermediateTexture;
         ComPtr<ID3D11ShaderResourceView> intermediateTextureSrv[2];
+
+        // The resources for each swapchain image.
+        std::vector<SwapchainImageResources> imageResources;
     };
-    std::unordered_map<XrSwapchain, std::vector<ScalerResources>> d3d11TextureMap;
-    std::unordered_map<XrSwapchain, uint32_t> swapchainIndices;
+    std::map<XrSwapchain, ScalerResources> scalerResources;
+    std::map<XrSwapchain, uint32_t> swapchainIndices;
+
+    // Common resources for indirect color conversion mode.
     ComPtr<ID3D11VertexShader> colorConversionVertexShader;
     ComPtr<ID3D11PixelShader> colorConversionPixelShader;
     ComPtr<ID3D11SamplerState> colorConversionSampler;
     ComPtr<ID3D11RasterizerState> colorConversionRasterizer;
 
+    // Interactive state (for use with hotkeys).
     bool useBilinearScaler = false;
     float newSharpness;
 
@@ -253,6 +269,37 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return false;
     }
 
+    // Implement keyboard shortcut detection and handling.
+    void HandleHotkeys()
+    {
+        static bool wasF1Pressed = false;
+        const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
+        if (!wasF1Pressed && isF1Pressed)
+        {
+            useBilinearScaler = !useBilinearScaler;
+        }
+        wasF1Pressed = isF1Pressed;
+
+        static bool wasF2Pressed = false;
+        const bool isF2Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_DOWN) || GetAsyncKeyState(VK_F2));
+        if (!wasF2Pressed && isF2Pressed)
+        {
+            newSharpness = max(0.f, newSharpness - 0.05f);
+            Log("sharpness=%.3f\n", newSharpness);
+        }
+        wasF2Pressed = isF2Pressed;
+
+        static bool wasF3Pressed = false;
+        const bool isF3Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_UP) || GetAsyncKeyState(VK_F3));
+        if (!wasF3Pressed && isF3Pressed)
+        {
+            newSharpness = min(1.f, newSharpness + 0.05f);
+            Log("sharpness=%.3f\n", newSharpness);
+        }
+        wasF3Pressed = isF3Pressed;
+    }
+
+    // Returns whether a texture format is directly supported by the NIS shader.
     bool IsSupportedColorFormat(
         const DXGI_FORMAT format)
     {
@@ -263,12 +310,15 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             || format == DXGI_FORMAT_R8G8B8A8_SINT;
     }
 
+    // Returns whether a texture format is indirectly supported by he NIS shader/
+    // Indirectly means that we implement a conversion path from this format to a supported format.
     bool IsIndirectlySupportedColorFormat(
         const DXGI_FORMAT format)
     {
         return format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     }
 
+    // Returns whether a depth format is supported by our layer.
     bool IsSupportedDepthFormat(
         const DXGI_FORMAT format)
     {
@@ -276,12 +326,15 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return false;
     }
 
+    // Returns whether this swapchain is currently set up for scaling.
     bool IsSwapchainHandled(
         const XrSwapchain swapchain)
     {
-        return swapchainInfo.find(swapchain) != swapchainInfo.cend();
+        return scalerResources.find(swapchain) != scalerResources.cend();
     }
 
+    // We override this OpenXR API in order to return the desired rendering resolution to the application.
+    // This resolution is pre-upscaling.
     XrResult NISScaler_xrEnumerateViewConfigurationViews(
         const XrInstance instance,
         const XrSystemId systemId,
@@ -296,7 +349,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const XrResult result = next_xrEnumerateViewConfigurationViews(instance, systemId, viewConfigurationType, viewCapacityInput, viewCountOutput, views);
         if (result == XR_SUCCESS && viewConfigurationType == XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO && viewCapacityInput > 0)
         {
-            // Override the recommended image size to account for scaling.
+            // Store the actual image size and override the recommended image size to account for scaling.
             for (uint32_t i = 0; i < *viewCountOutput; i++)
             {
                 actualDisplayWidth = views[i].recommendedImageRectWidth;
@@ -319,6 +372,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to prioritize our preferred texture formats.
     XrResult NISScaler_xrEnumerateSwapchainFormats(
         const XrSession session,
         uint32_t formatCapacityInput,
@@ -332,7 +386,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
         // We might need to return a smaller array. Always allocate the full-size array.
         result = next_xrEnumerateSwapchainFormats(session, 0, formatCountOutput, nullptr);
-        if (result == XR_SUCCESS)
+        if (result == XR_SUCCESS && d3d11Device)
         {
             // TODO: Compliance: someone could've passed a smaller array...
             formatCapacityInput = *formatCountOutput;
@@ -401,6 +455,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to intercept the D3D device used by the application.
+    // We also initialize some common resources.
     XrResult NISScaler_xrCreateSession(
         const XrInstance instance,
         const XrSessionCreateInfo* const createInfo,
@@ -412,8 +468,6 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const XrResult result = next_xrCreateSession(instance, createInfo, session);
         if (result == XR_SUCCESS)
         {
-            useD3D11 = useD3D12 = false;
-
             try
             {
                 const XrBaseInStructure* entry = reinterpret_cast<const XrBaseInStructure*>(createInfo->next);
@@ -463,15 +517,11 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         rsDesc.CullMode = D3D11_CULL_NONE;
                         rsDesc.FrontCounterClockwise = TRUE;
                         DX::ThrowIfFailed(d3d11Device->CreateRasterizerState(&rsDesc, colorConversionRasterizer.GetAddressOf()));
-
-                        useD3D11 = true;
                     }
                     else if (entry->type == XR_TYPE_GRAPHICS_BINDING_D3D12_KHR)
                     {
                         // TODO: Support D3D12.
                         Log("D3D12 is not supported.\n");
-
-                        useD3D12 = true;
                     }
 
                     entry = entry->next;
@@ -496,6 +546,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to do cleanup.
     XrResult NISScaler_xrDestroySession(
         const XrSession session)
     {
@@ -506,8 +557,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         if (result == XR_SUCCESS)
         {
             // Cleanup all the scaler's resources.
-            NISScaler.clear();
-            bilinearScaler.clear();
+            scalerResources.clear();
+            swapchainIndices.clear();
             colorConversionRasterizer = nullptr;
             colorConversionSampler = nullptr;
             colorConversionPixelShader = nullptr;
@@ -521,6 +572,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to setup our NIS scaler for the appropriate resolutions.
+    // We also request that the textures provided by the OpenXR runtime can be used with the NIS scaler.
     XrResult NISScaler_xrCreateSwapchain(
         const XrSession session,
         const XrSwapchainCreateInfo* const createInfo,
@@ -536,7 +589,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const bool isIndirectlySupportedColorFormat = IsIndirectlySupportedColorFormat((DXGI_FORMAT)createInfo->format);
         const bool isSupportedColorFormat = IsSupportedColorFormat((DXGI_FORMAT)createInfo->format) || isIndirectlySupportedColorFormat;
         const bool isSupportedDepthFormat = IsSupportedDepthFormat((DXGI_FORMAT)createInfo->format);
-        const bool isHandled = createInfo->arraySize <= 2 && createInfo->faceCount == 1 && (isSupportedColorFormat || isSupportedDepthFormat);
+        const bool isHandled = d3d11Device && createInfo->arraySize <= 2 && createInfo->faceCount == 1 && (isSupportedColorFormat || isSupportedDepthFormat);
 
         if (isHandled)
         {
@@ -579,24 +632,25 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             {
                 try
                 {
+                    ScalerResources resources;
+
                     // Create the scalers.
                     // TODO: Add an option to disable the bilinear scaler and save memory.
                     {
-                        auto scaler = std::make_shared<BilinearUpscale>(deviceResources);
-                        scaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
-                        bilinearScaler.insert_or_assign(*swapchain, scaler);
+                        resources.bilinearScaler = std::make_shared<BilinearUpscale>(deviceResources);
+                        resources.bilinearScaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
+                    // TODO: Use NVSharpen when scaling is 1.
                     {
-                        auto scaler = std::make_shared<NVScaler>(deviceResources, dllHome);
-                        scaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
-                        NISScaler.insert_or_assign(*swapchain, scaler);
+                        resources.NISScaler = std::make_shared<NVScaler>(deviceResources, dllHome);
+                        resources.NISScaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
 
                     // We keep track of the (real) swapchain info for when we intercept the textures in xrEnumerateSwapchainImages().
-                    swapchainInfo.insert_or_assign(*swapchain, *createInfo);
+                    resources.swapchainInfo = *createInfo;
 
                     // We will keep track of the textures we distribute to the app.
-                    d3d11TextureMap.insert_or_assign(*swapchain, std::vector<ScalerResources>());
+                    scalerResources.insert_or_assign(*swapchain, std::move(resources));
                 }
                 catch (std::runtime_error exc)
                 {
@@ -605,7 +659,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             }
             else
             {
-                Log("Swapchain with format %d and array size %u is not supported.\n", createInfo->format, createInfo->arraySize);
+                Log("Swapchain with format %d, array size %u and face count %u is not supported.\n", createInfo->format, createInfo->arraySize, createInfo->faceCount);
             }
         }
         else
@@ -618,6 +672,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to do cleanup.
     XrResult NISScaler_xrDestroySwapchain(
         const XrSwapchain swapchain)
     {
@@ -628,13 +683,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         if (result == XR_SUCCESS && IsSwapchainHandled(swapchain))
         {
             // Cleanup the resources.
-            bilinearScaler.erase(swapchain);
-            NISScaler.erase(swapchain);
-            d3d11TextureMap.erase(swapchain);
-
-            // Forget about this swapchain.
+            scalerResources.erase(swapchain);
             swapchainIndices.erase(swapchain);
-            swapchainInfo.erase(swapchain);
         }
 
         DebugLog("<-- NISScaler_xrDestroySwapchain %d\n", result);
@@ -642,6 +692,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to intercept the textures that the app will render to.
+    // We setup our resources in order to insert the NIS scaler between the application and the runtime.
     XrResult NISScaler_xrEnumerateSwapchainImages(
         const XrSwapchain swapchain,
         const uint32_t imageCapacityInput,
@@ -659,115 +711,114 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         {
             try
             {
-                if (useD3D11)
+                XrSwapchainImageD3D11KHR* d3dImages = reinterpret_cast<XrSwapchainImageD3D11KHR*>(images);
+                ScalerResources& commonResources = scalerResources[swapchain];
+
+                // Detect some properties for our resources.
+                const XrSwapchainCreateInfo& imageInfo = commonResources.swapchainInfo;
+                const bool indirectMode = IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format);
+                const bool needColorConversion = indirectMode && indirectFormat == DXGI_FORMAT_UNKNOWN;
+                for (uint32_t i = 0; i < *imageCountOutput; i++)
                 {
-                    XrSwapchainImageD3D11KHR* d3dImages = reinterpret_cast<XrSwapchainImageD3D11KHR*>(images);
-                    const XrSwapchainCreateInfo& imageInfo = swapchainInfo.find(swapchain)->second;
-                    const bool indirectMode = IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format);
-                    const bool needColorConversion = indirectMode && indirectFormat == DXGI_FORMAT_UNKNOWN;
-                    for (uint32_t i = 0; i < *imageCountOutput; i++)
+                    SwapchainImageResources resources;
+
+                    // We don't strictly need to keep the runtime texture, but we do it for possible future uses.
+                    resources.runtimeTexture = d3dImages[i].texture;
+
+                    // Create the texture that the app will render to.
+                    D3D11_TEXTURE2D_DESC textureDesc;
+                    ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
+                    textureDesc.Width = imageInfo.width;
+                    textureDesc.Height = imageInfo.height;
+                    textureDesc.MipLevels = imageInfo.mipCount;
+                    textureDesc.ArraySize = imageInfo.arraySize;
+                    textureDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                    textureDesc.SampleDesc.Count = imageInfo.sampleCount;
+                    textureDesc.Usage = D3D11_USAGE_DEFAULT;
+                    if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT)
                     {
-                        ScalerResources resources;
-                        resources.runtimeTexture = d3dImages[i].texture;
+                        textureDesc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+                    }
+                    if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                    {
+                        textureDesc.BindFlags |= D3D11_BIND_DEPTH_STENCIL;
+                    }
+                    if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_UNORDERED_ACCESS_BIT)
+                    {
+                        textureDesc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
+                    }
+                    // This flag is needed for the scaler.
+                    textureDesc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+                    DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, resources.appTexture.GetAddressOf()));
 
-                        // Create the texture that the app will render to.
-                        D3D11_TEXTURE2D_DESC textureDesc;
-                        ZeroMemory(&textureDesc, sizeof(D3D11_TEXTURE2D_DESC));
-                        textureDesc.Width = imageInfo.width;
-                        textureDesc.Height = imageInfo.height;
-                        textureDesc.MipLevels = imageInfo.mipCount;
-                        textureDesc.ArraySize = imageInfo.arraySize;
-                        textureDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                        textureDesc.SampleDesc.Count = imageInfo.sampleCount;
-                        textureDesc.Usage = D3D11_USAGE_DEFAULT;
-                        if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT)
-                        {
-                            textureDesc.BindFlags |= D3D11_BIND_RENDER_TARGET;
-                        }
-                        if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                        {
-                            textureDesc.BindFlags |= D3D11_BIND_DEPTH_STENCIL;
-                        }
-                        if (imageInfo.usageFlags & XR_SWAPCHAIN_USAGE_UNORDERED_ACCESS_BIT)
-                        {
-                            textureDesc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
-                        }
-                        // This flag is needed for the scaler.
-                        textureDesc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
-                        DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, resources.appTexture.GetAddressOf()));
+                    // Create an intermediate texture for color conversion. This texture is compatible with the scaler's output.
+                    // TODO: Investigate doing this through a TYPELESS instead... Would be better performance.
+                    if (needColorConversion && i == 0)
+                    {
+                        textureDesc.Width = actualDisplayWidth;
+                        textureDesc.Height = actualDisplayHeight;
+                        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                        textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+                        DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, commonResources.intermediateTexture.GetAddressOf()));
+                    }
 
-                        // Create an intermediate texture for color conversion. This texture is compatible with the scaler's output.
-                        // TODO: Investigate doing this through a TYPELESS instead... Would be better performance.
+                    // Create the views needed by the scalers and color conversion.
+                    for (uint32_t j = 0; j < imageInfo.arraySize; j++)
+                    {
+                        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+                        ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
+                        srvDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                        srvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_SRV_DIMENSION_TEXTURE2D : D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+                        srvDesc.Texture2DArray.MostDetailedMip = 0;
+                        srvDesc.Texture2DArray.MipLevels = imageInfo.mipCount;
+                        srvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                        srvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
+                        DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(resources.appTexture.Get(), &srvDesc, resources.appTextureSrv[j].GetAddressOf()));
+
+                        if (needColorConversion && i == 0)
+                        {
+                            srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                            DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(commonResources.intermediateTexture.Get(), &srvDesc, commonResources.intermediateTextureSrv[j].GetAddressOf()));
+                        }
+
+                        D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+                        ZeroMemory(&uavDesc, sizeof(D3D11_UNORDERED_ACCESS_VIEW_DESC));
+                        if (!indirectMode)
+                        {
+                            uavDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                        }
+                        else if (!needColorConversion)
+                        {
+                            uavDesc.Format = indirectFormat;
+                        }
+                        else
+                        {
+                            uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                        }
+                        uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
+                        uavDesc.Texture2DArray.MipSlice = 0;
+                        uavDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                        uavDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
+                        ID3D11Resource* const targetTexture = needColorConversion ? commonResources.intermediateTexture.Get() : resources.runtimeTexture;
+                        DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(targetTexture, &uavDesc, resources.runtimeTextureUav[j].GetAddressOf()));
+
                         if (needColorConversion)
                         {
-                            textureDesc.Width = actualDisplayWidth;
-                            textureDesc.Height = actualDisplayHeight;
-                            textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                            textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-                            DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, resources.intermediateTexture.GetAddressOf()));
+                            D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+                            ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
+                            rtvDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                            rtvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_RTV_DIMENSION_TEXTURE2D : D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                            rtvDesc.Texture2DArray.MipSlice = 0;
+                            rtvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                            rtvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
+                            DX::ThrowIfFailed(deviceResources.device()->CreateRenderTargetView(resources.runtimeTexture, &rtvDesc, resources.runtimeTextureRtv[j].GetAddressOf()));
                         }
 
-                        // Create the views needed by the scalers and color conversion.
-                        for (uint32_t j = 0; j < imageInfo.arraySize; j++)
-                        {
-                            D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-                            ZeroMemory(&srvDesc, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
-                            srvDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                            srvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_SRV_DIMENSION_TEXTURE2D : D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-                            srvDesc.Texture2DArray.MostDetailedMip = 0;
-                            srvDesc.Texture2DArray.MipLevels = imageInfo.mipCount;
-                            srvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
-                            srvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
-                            DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(resources.appTexture.Get(), &srvDesc, resources.appTextureSrv[j].GetAddressOf()));
-
-                            if (needColorConversion)
-                            {
-                                srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                                DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(resources.intermediateTexture.Get(), &srvDesc, resources.intermediateTextureSrv[j].GetAddressOf()));
-                            }
-
-                            D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-                            ZeroMemory(&uavDesc, sizeof(D3D11_UNORDERED_ACCESS_VIEW_DESC));
-                            if (!indirectMode)
-                            {
-                                uavDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                            }
-                            else if (!needColorConversion)
-                            {
-                                uavDesc.Format = indirectFormat;
-                            }
-                            else
-                            {
-                                uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                            }
-                            uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
-                            uavDesc.Texture2DArray.MipSlice = 0;
-                            uavDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
-                            uavDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
-                            ID3D11Resource* const targetTexture = needColorConversion ? resources.intermediateTexture.Get() : resources.runtimeTexture;
-                            DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(targetTexture, &uavDesc, resources.runtimeTextureUav[j].GetAddressOf()));
-
-                            if (needColorConversion)
-                            {
-                                D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
-                                ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
-                                rtvDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                                rtvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_RTV_DIMENSION_TEXTURE2D : D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-                                rtvDesc.Texture2DArray.MipSlice = 0;
-                                rtvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
-                                rtvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
-                                DX::ThrowIfFailed(deviceResources.device()->CreateRenderTargetView(resources.runtimeTexture, &rtvDesc, resources.runtimeTextureRtv[j].GetAddressOf()));
-                            }
-                        }
-
-                        // Let the app use our downscaled texture and keep track of the resources to use during xrEndFrame().
-                        d3d11TextureMap[swapchain].push_back(resources);
-                        d3dImages[i].texture = resources.appTexture.Get();
+                        commonResources.imageResources.push_back(resources);
                     }
-                }
-                else if (useD3D12)
-                {
-                    // TODO: Support D3D12.
+
+                    // Let the app use our downscaled texture and keep track of the resources to use during xrEndFrame().
+                    d3dImages[i].texture = resources.appTexture.Get();
                 }
             }
             catch (std::runtime_error exc)
@@ -781,6 +832,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to record which texture within a swapchain is being submitted to xrEndFrame().
     XrResult NISScaler_xrAcquireSwapchainImage(
         const XrSwapchain swapchain,
         const XrSwapchainImageAcquireInfo* const acquireInfo,
@@ -790,10 +842,14 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
         // Call the chain to perform the actual operation.
         const XrResult result = next_xrAcquireSwapchainImage(swapchain, acquireInfo, index);
-        if (result == XR_SUCCESS && IsSwapchainHandled(swapchain))
+        if (result == XR_SUCCESS)
         {
-            // Keep track of the current texture index.
-            swapchainIndices.insert_or_assign(swapchain, *index);
+            auto swapchainIndex = swapchainIndices.find(swapchain);
+            if (swapchainIndex != swapchainIndices.end())
+            {
+                // Keep track of the current texture index.
+                swapchainIndex->second = *index;
+            }
         }
 
         DebugLog("<-- NISScaler_xrAcquireSwapchainImage %d\n", result);
@@ -801,6 +857,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
+    // We override this OpenXR API in order to apply the NIS scaling and submit its output to the OpenXR runtime.
     XrResult NISScaler_xrEndFrame(
         const XrSession session,
         const XrFrameEndInfo* const frameEndInfo)
@@ -808,33 +865,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         DebugLog("--> NISScaler_xrEndFrame\n");
 
         // Check keyboard input.
-        {
-            static bool wasF1Pressed = false;
-            const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
-            if (!wasF1Pressed && isF1Pressed)
-            {
-                useBilinearScaler = !useBilinearScaler;
-            }
-            wasF1Pressed = isF1Pressed;
-
-            static bool wasF2Pressed = false;
-            const bool isF2Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_DOWN) || GetAsyncKeyState(VK_F2));
-            if (!wasF2Pressed && isF2Pressed)
-            {
-                newSharpness = max(0.f, newSharpness - 0.05f);
-                Log("sharpness=%.3f\n", newSharpness);
-            }
-            wasF2Pressed = isF2Pressed;
-
-            static bool wasF3Pressed = false;
-            const bool isF3Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_UP) || GetAsyncKeyState(VK_F3));
-            if (!wasF3Pressed && isF3Pressed)
-            {
-                newSharpness = min(1.f, newSharpness + 0.05f);
-                Log("sharpness=%.3f\n", newSharpness);
-            }
-            wasF3Pressed = isF3Pressed;
-        }
+        HandleHotkeys();
 
         // Go through each projection layer.
         std::vector<const XrCompositionLayerBaseHeader*> layers(frameEndInfo->layerCount);
@@ -843,93 +874,90 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             if (frameEndInfo->layers[i]->type == XR_TYPE_COMPOSITION_LAYER_PROJECTION)
             {
                 const XrCompositionLayerProjection* proj = reinterpret_cast<const XrCompositionLayerProjection*>(frameEndInfo->layers[i]);
-
                 for (uint32_t j = 0; j < proj->viewCount; j++)
                 {
-                    const auto& view = proj->views[j];
-
-                    if (!IsSwapchainHandled(view.subImage.swapchain))
+                    // Check whether this layer can be upscaled.
+                    const XrCompositionLayerProjectionView& view = proj->views[j];
+                    auto scalerResourceIt = scalerResources.find(view.subImage.swapchain);
+                    if (scalerResourceIt == scalerResources.end())
                     {
                         continue;
                     }
 
-                    // Perform upscaling.
-                    if (useD3D11)
+                    // Collect the resources and properties of the swapchain.
+                    const ScalerResources& commonResources = scalerResourceIt->second;
+                    const XrSwapchainCreateInfo& imageInfo = commonResources.swapchainInfo;
+                    const SwapchainImageResources& swapchainResources = commonResources.imageResources[swapchainIndices[view.subImage.swapchain]];
+                    const bool indirectMode = IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format);
+                    const bool needColorConversion = indirectMode && indirectFormat == DXGI_FORMAT_UNKNOWN;
+
+                    // Adjust the scaler's settings if needed.
+                    if (abs(config.sharpness - newSharpness) > FLT_EPSILON)
                     {
-                        const XrSwapchainCreateInfo& imageInfo = swapchainInfo.find(view.subImage.swapchain)->second;
-                        const bool indirectMode = IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format);
-                        const bool needColorConversion = indirectMode && indirectFormat == DXGI_FORMAT_UNKNOWN;
-
-                        // Adjust the scaler if needed.
-                        if (abs(config.sharpness - newSharpness) > FLT_EPSILON)
-                        {
-                            bilinearScaler[view.subImage.swapchain]->update(imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
-                            NISScaler[view.subImage.swapchain]->update(newSharpness, imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
-                            config.sharpness = newSharpness;
-                        }
-
-                        // Invoke the scaler.
-                        const ScalerResources& colorResources = d3d11TextureMap[view.subImage.swapchain][swapchainIndices[view.subImage.swapchain]];
-                        ID3D11ShaderResourceView* const srv = colorResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
-                        ID3D11UnorderedAccessView* const uav = colorResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
-                        if (!useBilinearScaler)
-                        {
-                            NISScaler[view.subImage.swapchain]->dispatch(&srv, &uav);
-                        }
-                        else
-                        {
-                            bilinearScaler[view.subImage.swapchain]->dispatch(&srv, &uav);
-                        }
-                        deviceResources.context()->OMSetRenderTargets(0, nullptr, nullptr);
-
-                        // Perform color conversion if needed.
-                        if (needColorConversion)
-                        {
-                            // Use a deferred context so we can use the context saving feature.
-                            ComPtr<ID3D11DeviceContext> deferredContext;
-                            DX::ThrowIfFailed(deviceResources.device()->CreateDeferredContext(0, deferredContext.GetAddressOf()));
-
-                            deferredContext->ClearState();
-
-                            ID3D11RenderTargetView* const rtvs[] = { colorResources.runtimeTextureRtv[view.subImage.imageArrayIndex].Get() };
-                            deferredContext->OMSetRenderTargets(1, rtvs, nullptr);
-                            deferredContext->OMSetBlendState(nullptr, nullptr, 0xffffffff);
-                            deferredContext->OMSetDepthStencilState(nullptr, 0);
-                            deferredContext->VSSetShader(colorConversionVertexShader.Get(), nullptr, 0);
-                            deferredContext->PSSetShader(colorConversionPixelShader.Get(), nullptr, 0);
-                            ID3D11ShaderResourceView* const srvs[] = { colorResources.intermediateTextureSrv[view.subImage.imageArrayIndex].Get() };
-                            deferredContext->PSSetShaderResources(0, 1, srvs);
-                            ID3D11SamplerState* const ss[] = { colorConversionSampler.Get() };
-                            deferredContext->PSSetSamplers(0, 1, ss);
-                            deferredContext->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
-                            deferredContext->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
-                            deferredContext->IASetInputLayout(nullptr);
-                            deferredContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-
-                            // TODO: Need to handle imageRect properly.
-                            CD3D11_VIEWPORT viewport(
-                                0.0f, 0.0f,
-                                (float)actualDisplayWidth, (float)actualDisplayHeight);
-                            deferredContext->RSSetViewports(1, &viewport);
-                            deferredContext->RSSetState(colorConversionRasterizer.Get());
-
-                            deferredContext->Draw(4, 0);
-
-                            // Execute the commands now.
-                            ComPtr<ID3D11CommandList> commandList;
-                            DX::ThrowIfFailed(deferredContext->FinishCommandList(FALSE, commandList.GetAddressOf()));
-                            deviceResources.context()->ExecuteCommandList(commandList.Get(), TRUE);
-                        }
-
-                        // Forward the real texture size to OpenXR.
-                        // TODO: This is non-compliant AND dangerous.
-                        ((XrCompositionLayerProjectionView*)&view)->subImage.imageRect.extent.width = actualDisplayWidth;
-                        ((XrCompositionLayerProjectionView*)&view)->subImage.imageRect.extent.height = actualDisplayHeight;
+                        commonResources.bilinearScaler->update(imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
+                        commonResources.NISScaler->update(newSharpness, imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
+                        config.sharpness = newSharpness;
                     }
-                    else if (useD3D12)
+
+                    // Invoke the scaler.
+                    // TODO: Need to handle imageRect properly.
+                    ID3D11ShaderResourceView* const srv = swapchainResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
+                    ID3D11UnorderedAccessView* const uav = swapchainResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
+                    if (!useBilinearScaler)
                     {
-                        // TODO: Support D3D12.
+                        commonResources.NISScaler->dispatch(&srv, &uav);
                     }
+                    else
+                    {
+                        commonResources.bilinearScaler->dispatch(&srv, &uav);
+                    }
+
+                    // This call is needed to avoid D3D debug layer warning.
+                    deviceResources.context()->OMSetRenderTargets(0, nullptr, nullptr);
+
+                    // Perform color conversion if needed.
+                    if (needColorConversion)
+                    {
+                        // Use a deferred context so we can use the context saving feature.
+                        // TODO: We could maybe bypass the context saving/restore by fully configuring the context with the minimum we need.
+                        ComPtr<ID3D11DeviceContext> deferredContext;
+                        DX::ThrowIfFailed(deviceResources.device()->CreateDeferredContext(0, deferredContext.GetAddressOf()));
+
+                        deferredContext->ClearState();
+
+                        // Draw a quad to invoke our conversion shader.
+                        ID3D11RenderTargetView* const rtvs[] = { swapchainResources.runtimeTextureRtv[view.subImage.imageArrayIndex].Get() };
+                        deferredContext->OMSetRenderTargets(1, rtvs, nullptr);
+                        deferredContext->OMSetBlendState(nullptr, nullptr, 0xffffffff);
+                        deferredContext->OMSetDepthStencilState(nullptr, 0);
+                        deferredContext->VSSetShader(colorConversionVertexShader.Get(), nullptr, 0);
+                        deferredContext->PSSetShader(colorConversionPixelShader.Get(), nullptr, 0);
+                        ID3D11ShaderResourceView* const srvs[] = { commonResources.intermediateTextureSrv[view.subImage.imageArrayIndex].Get() };
+                        deferredContext->PSSetShaderResources(0, 1, srvs);
+                        ID3D11SamplerState* const ss[] = { colorConversionSampler.Get() };
+                        deferredContext->PSSetSamplers(0, 1, ss);
+                        deferredContext->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+                        deferredContext->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+                        deferredContext->IASetInputLayout(nullptr);
+                        deferredContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+                        // TODO: Need to handle imageRect properly.
+                        CD3D11_VIEWPORT viewport(0.f, 0.f, (float)actualDisplayWidth, (float)actualDisplayHeight);
+                        deferredContext->RSSetViewports(1, &viewport);
+                        deferredContext->RSSetState(colorConversionRasterizer.Get());
+
+                        deferredContext->Draw(4, 0);
+
+                        // Execute the commands now and make sure we restore the context.
+                        ComPtr<ID3D11CommandList> commandList;
+                        DX::ThrowIfFailed(deferredContext->FinishCommandList(FALSE, commandList.GetAddressOf()));
+                        deviceResources.context()->ExecuteCommandList(commandList.Get(), TRUE);
+                    }
+
+                    // Forward the real texture size to OpenXR.
+                    // TODO: This is non-compliant AND dangerous. We cannot bypass the constness here and should make a copy instead.
+                    ((XrCompositionLayerProjectionView*)&view)->subImage.imageRect.extent.width = actualDisplayWidth;
+                    ((XrCompositionLayerProjectionView*)&view)->subImage.imageRect.extent.height = actualDisplayHeight;
 
                     // Perform upscaling for the depth layer if needed.
                     const XrBaseInStructure* entry = reinterpret_cast<const XrBaseInStructure*>(view.next);
@@ -939,13 +967,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         {
                             const XrCompositionLayerDepthInfoKHR* depth = reinterpret_cast<const XrCompositionLayerDepthInfoKHR*>(entry);
 
-                            if (!IsSwapchainHandled(depth->subImage.swapchain))
-                            {
-                                break;
-                            }
-
                             // TODO: Support depth.
-
                             break;
                         }
 

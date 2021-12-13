@@ -10,7 +10,6 @@ Performance work:
 ** If not: optimize the vertex shader to only draw one triangle and use clipping
 * Add a switch to toggle half-precision floats
 * Add an option to disable the bilinear scaler and save up memory
-* Optimize XrHandle lookup (data structure? grouping?)
 
 Compliance work:
 
