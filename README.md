@@ -24,7 +24,7 @@ A ZIP archive containing the necessary files to install and use the layer can be
 
 2. Place the files extracted from the ZIP archive (`XR_APILAYER_NOVENDOR_nis_scaler.json`, `XR_APILAYER_NOVENDOR_nis_scaler.dll`, `NIS_Main.hlsl`, `NIS_Scaler.h`, `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` and `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1`) in the folder created above. Also copy any configuration file (eg: `FS2020.cfg`) to that folder.
 
-3. Run the script `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1`. You will be prompted for elevation (running as Administrator).
+3. Run the script `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` by right-clicking on the file, then choosing "Run with PowerShell". You will be prompted for elevation (running as Administrator).
 
 4. (Optional) Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. A layer named `XR_APILAYER_NOVENDOR_nis_scaler` should be listed.
 
@@ -32,11 +32,13 @@ A ZIP archive containing the necessary files to install and use the layer can be
 
 1. Go to the folder where the API layer is installed. For example: `C:\Program Files\OpenXR-API-Layers`.
 
-2. Run the script `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1`. You will be prompted for elevation (running as Administrator).
+2. Run the script `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1` by right-clicking on the file, then choosing "Run with PowerShell". You will be prompted for elevation (running as Administrator).
 
 3. (Optional) Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. There should be no layer named `XR_APILAYER_NOVENDOR_nis_scaler`.
 
 ## App configuration
+
+NOTE TO Microsoft Flight Simulator 2020 USERS: The ZIP archive already contains a configuration file (`FS2020.cfg`) for Flight Simulator 2020! Just copy the file as part of Setup step 2) above!
 
 In order to enable the software for a given application (eg: Microsoft Flight Simulator 2020 aka MSFS2020), a configuration file must be present for this application.
 
@@ -44,7 +46,7 @@ In order to enable the software for a given application (eg: Microsoft Flight Si
 
 2. Locate the log file for the software. It will typically be stored at `%LocalAppData%\XR_APILAYER_NOVENDOR_nis_scaler.log`.
 
-3. In the log file, search for the first line reading "Could not load config for ...". The name specified on this line is the application name.
+3. In the log file, search for the first line reading "Could not load config for ...". The name specified on this line is the application name:
 
 ```
 dllHome is "C:\Program Files\OpenXR-API-Layers"

@@ -1,28 +1,27 @@
 Improvements:
 
 * Investigate issue with dark scenes (reported on MSFS forum)
-* Print runtime ID string in the log for debugging
+* Integrate CptLucky8 exposure change
 
 Performance work:
 
-* Use NVSharpen when scaling=1
 * Investigate how to remove the color space conversion when using SteamVR
 ** If not: optimize the vertex shader to only draw one triangle and use clipping
 * Add a switch to toggle half-precision floats
-* Add an option to disable the bilinear scaler and save up memory
 
-Compliance work:
+Feature work:
+
+* Implement support for Direct3D 12 using D3D11on12
+* Add brightness/contrast/saturation to the shader
+* Investigate (again) the FOV modifier idea (discussed on MSFS forum)
+* Implement preset hotkeys(?)
+* Implement an overlay UI(?)
+* Implement native support for Direct3D 12(?)
+
+Compliance work (does not affect MSFS2020 as of Dec'21):
 
 * Do not alter the application's xrEndFrameInfo(!)
 * Test with image arraySize=2 (VPRT)
 * Test with image sampeleCount>1 (MSAA)
 * Handle depth submission
 * Handle imageRect that don't cover the full texure
-
-Feature work:
-
-* Implement support for Direct3D 12 using D3D11on12
-* Investigate (again) the FOV modifier idea (discussed on MSFS forum)
-* Implement preset hotkeys(?)
-* Implement an overlay UI(?)
-* Implement native support for Direct3D 12(?)
