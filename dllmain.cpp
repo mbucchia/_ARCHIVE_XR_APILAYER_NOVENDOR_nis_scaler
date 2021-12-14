@@ -19,6 +19,7 @@
 #include <DeviceResources.h>
 #include <BilinearUpscale.h>
 #include <NVScaler.h>
+#include <NVSharpen.h>
 
 #define STRINGIFY(s) XSTRINGIFY(s)
 #define XSTRINGIFY(s) #s
@@ -91,9 +92,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         // The swapchain info as requested by the application.
         XrSwapchainCreateInfo swapchainInfo;
 
-        // Scaler processors.
+        // Scaler processors. Either NISScaler or NISSharpen will be used based on the requested scaling (not both).
         std::shared_ptr<BilinearUpscale> bilinearScaler;
         std::shared_ptr<NVScaler> NISScaler;
+        std::shared_ptr<NVSharpen> NISSharpen;
 
         // Common resources for indirect color conversion mode.
         ComPtr<ID3D11Texture2D> intermediateTexture;
@@ -123,6 +125,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         float sharpness;
         bool onlyAdvertiseCapableFormats;
         bool prioritizeCapableFormats;
+        bool disableBilinearScaler;
 
         void Dump()
         {
@@ -152,7 +155,14 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         Log("Prioritize capable formats\n");
                     }
                 }
-                Log("Use scaling factor: %.3f\n", scaleFactor);
+                if (scaleFactor < 1.f)
+                {
+                    Log("Use scaling factor: %.3f\n", scaleFactor);
+                }
+                else
+                {
+                    Log("No scaling, sharpening only\n");
+                }
                 Log("Sharpness set to %.3f\n", sharpness);
             }
         }
@@ -164,6 +174,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             sharpness = 0.5f;
             onlyAdvertiseCapableFormats = false;
             prioritizeCapableFormats = true;
+            disableBilinearScaler = false;
         }
     } config;
 
@@ -250,6 +261,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         {
                             config.prioritizeCapableFormats = value == "1" || value == "true";
                         }
+                        else if (name == "disable_bilinear_scaler")
+                        {
+                            config.disableBilinearScaler = value == "1" || value == "true";
+                        }
                     }
                 }
                 catch (...)
@@ -274,7 +289,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     {
         static bool wasF1Pressed = false;
         const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
-        if (!wasF1Pressed && isF1Pressed)
+        if (!wasF1Pressed && isF1Pressed && !config.disableBilinearScaler)
         {
             useBilinearScaler = !useBilinearScaler;
         }
@@ -349,21 +364,28 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const XrResult result = next_xrEnumerateViewConfigurationViews(instance, systemId, viewConfigurationType, viewCapacityInput, viewCountOutput, views);
         if (result == XR_SUCCESS && viewConfigurationType == XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO && viewCapacityInput > 0)
         {
-            // Store the actual image size and override the recommended image size to account for scaling.
-            for (uint32_t i = 0; i < *viewCountOutput; i++)
+            actualDisplayWidth = views[0].recommendedImageRectWidth;
+            actualDisplayHeight = views[0].recommendedImageRectHeight;
+
+            if (config.scaleFactor < 1.f)
             {
-                actualDisplayWidth = views[i].recommendedImageRectWidth;
-                actualDisplayHeight = views[i].recommendedImageRectHeight;
-
-                views[i].recommendedImageRectWidth = (uint32_t)(views[i].recommendedImageRectWidth * config.scaleFactor);
-                views[i].recommendedImageRectHeight = (uint32_t)(views[i].recommendedImageRectHeight * config.scaleFactor);
-
-                if (i == 0)
+                // Store the actual image size and override the recommended image size to account for scaling.
+                for (uint32_t i = 0; i < *viewCountOutput; i++)
                 {
-                    Log("Scaled resolution is: %ux%u (%u%% of %ux%u)\n",
-                        views[i].recommendedImageRectWidth, views[i].recommendedImageRectHeight,
-                        (unsigned int)((config.scaleFactor + 0.001f) * 100), actualDisplayWidth, actualDisplayHeight);
+                    views[i].recommendedImageRectWidth = (uint32_t)(views[i].recommendedImageRectWidth * config.scaleFactor);
+                    views[i].recommendedImageRectHeight = (uint32_t)(views[i].recommendedImageRectHeight * config.scaleFactor);
+
+                    if (i == 0)
+                    {
+                        Log("Scaled resolution is: %ux%u (%u%% of %ux%u)\n",
+                            views[i].recommendedImageRectWidth, views[i].recommendedImageRectHeight,
+                            (unsigned int)((config.scaleFactor + 0.001f) * 100), actualDisplayWidth, actualDisplayHeight);
+                    }
                 }
+            }
+            else
+            {
+                Log("Using OpenXR resolution (no scaling): %ux%u\n", actualDisplayWidth, actualDisplayHeight);
             }
         }
 
@@ -635,15 +657,20 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     ScalerResources resources;
 
                     // Create the scalers.
-                    // TODO: Add an option to disable the bilinear scaler and save memory.
+                    if (!config.disableBilinearScaler)
                     {
                         resources.bilinearScaler = std::make_shared<BilinearUpscale>(deviceResources);
                         resources.bilinearScaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
-                    // TODO: Use NVSharpen when scaling is 1.
+                    if (config.scaleFactor < 1.f)
                     {
                         resources.NISScaler = std::make_shared<NVScaler>(deviceResources, dllHome);
                         resources.NISScaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
+                    }
+                    else
+                    {
+                        resources.NISSharpen = std::make_shared<NVSharpen>(deviceResources, dllHome);
+                        resources.NISSharpen->update(config.sharpness, createInfo->width, createInfo->height);
                     }
 
                     // We keep track of the (real) swapchain info for when we intercept the textures in xrEnumerateSwapchainImages().
@@ -771,7 +798,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         srvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_SRV_DIMENSION_TEXTURE2D : D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
                         srvDesc.Texture2DArray.MostDetailedMip = 0;
                         srvDesc.Texture2DArray.MipLevels = imageInfo.mipCount;
-                        srvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                        srvDesc.Texture2DArray.ArraySize = 1;
                         srvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
                         DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(resources.appTexture.Get(), &srvDesc, resources.appTextureSrv[j].GetAddressOf()));
 
@@ -797,7 +824,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         }
                         uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
                         uavDesc.Texture2DArray.MipSlice = 0;
-                        uavDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                        uavDesc.Texture2DArray.ArraySize = 1;
                         uavDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
                         ID3D11Resource* const targetTexture = needColorConversion ? commonResources.intermediateTexture.Get() : resources.runtimeTexture;
                         DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(targetTexture, &uavDesc, resources.runtimeTextureUav[j].GetAddressOf()));
@@ -894,8 +921,18 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // Adjust the scaler's settings if needed.
                     if (abs(config.sharpness - newSharpness) > FLT_EPSILON)
                     {
-                        commonResources.bilinearScaler->update(imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
-                        commonResources.NISScaler->update(newSharpness, imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
+                        if (commonResources.bilinearScaler)
+                        {
+                            commonResources.bilinearScaler->update(imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
+                        }
+                        if (commonResources.NISScaler)
+                        {
+                            commonResources.NISScaler->update(newSharpness, imageInfo.width, imageInfo.height, actualDisplayWidth, actualDisplayHeight);
+                        }
+                        else
+                        {
+                            commonResources.NISSharpen->update(newSharpness, imageInfo.width, imageInfo.height);
+                        }
                         config.sharpness = newSharpness;
                     }
 
@@ -903,9 +940,16 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // TODO: Need to handle imageRect properly.
                     ID3D11ShaderResourceView* const srv = swapchainResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
                     ID3D11UnorderedAccessView* const uav = swapchainResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
-                    if (!useBilinearScaler)
+                    if (!useBilinearScaler || !commonResources.bilinearScaler)
                     {
-                        commonResources.NISScaler->dispatch(&srv, &uav);
+                        if (commonResources.NISScaler)
+                        {
+                            commonResources.NISScaler->dispatch(&srv, &uav);
+                        }
+                        else
+                        {
+                            commonResources.NISSharpen->dispatch(&srv, &uav);
+                        }
                     }
                     else
                     {
@@ -1059,6 +1103,15 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const XrResult result = apiLayerInfo->nextInfo->nextCreateApiLayerInstance(instanceCreateInfo, &chainApiLayerInfo, instance);
         if (result == XR_SUCCESS)
         {
+            PFN_xrGetInstanceProperties xrGetInstanceProperties;
+            XrInstanceProperties instanceProperties = { XR_TYPE_INSTANCE_PROPERTIES };
+            if (next_xrGetInstanceProcAddr(*instance, "xrGetInstanceProperties", reinterpret_cast<PFN_xrVoidFunction*>(&xrGetInstanceProperties)) == XR_SUCCESS &&
+                xrGetInstanceProperties(*instance, &instanceProperties) == XR_SUCCESS)
+            {
+                Log("Using OpenXR runtime %s, version %u.%u.%u\n", instanceProperties.runtimeName,
+                    XR_VERSION_MAJOR(instanceProperties.runtimeVersion), XR_VERSION_MINOR(instanceProperties.runtimeVersion), XR_VERSION_PATCH(instanceProperties.runtimeVersion));
+            }
+
             config.Reset();
 
             // Identify the application and load our configuration. Try by application first, then fallback to engines otherwise.

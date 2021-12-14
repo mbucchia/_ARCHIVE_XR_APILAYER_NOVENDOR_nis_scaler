@@ -47,6 +47,9 @@
     <ClInclude Include="NVIDIAImageScaling\samples\common\Utilities.h">
       <Filter>NVIDIAImageScaling\DX11</Filter>
     </ClInclude>
+    <ClInclude Include="NVIDIAImageScaling\samples\DX11\include\NVSharpen.h">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -63,6 +66,9 @@
     </ClCompile>
     <ClCompile Include="DeviceResources.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NVIDIAImageScaling\samples\DX11\src\NVSharpen.cpp">
+      <Filter>NVIDIAImageScaling\DX11</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
