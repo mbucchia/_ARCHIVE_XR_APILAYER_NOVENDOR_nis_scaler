@@ -163,6 +163,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         float sharpness;
         bool disableBilinearScaler;
         DXGI_FORMAT intermediateFormat;
+        bool fastContextSwitch;
         bool enableStats;
 
         void Dump()
@@ -183,6 +184,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                 }
 
                 Log("Using intermediate format: %d\n", intermediateFormat);
+                if (config.fastContextSwitch)
+                {
+                    Log("Using fast context switch\n");
+                }
                 if (scaleFactor < 1.f)
                 {
                     Log("Use scaling factor: %.3f\n", scaleFactor);
@@ -202,6 +207,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             sharpness = 0.5f;
             disableBilinearScaler = false;
             intermediateFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
+            fastContextSwitch = false;
             enableStats = false;
         }
     } config;
@@ -288,6 +294,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         else if (name == "intermediate_format")
                         {
                             config.intermediateFormat = (DXGI_FORMAT)std::stoi(value);
+                        }
+                        else if (name == "fast_context_switch")
+                        {
+                            config.fastContextSwitch = value == "1" || value == "true";
                         }
                         else if (name == "enable_stats")
                         {
@@ -1010,42 +1020,54 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     {
                         StartTimer(scalingMode == ScalingMode::Flat ? commonResources.scalerTimer : commonResources.colorConversionTimer);
 
-                        // Use a deferred context so we can use the context saving feature.
-                        // TODO: We could maybe bypass the context saving/restore by fully configuring the context with the minimum we need.
-                        ComPtr<ID3D11DeviceContext> deferredContext;
-                        DX::ThrowIfFailed(deviceResources.device()->CreateDeferredContext(0, deferredContext.GetAddressOf()));
-
-                        deferredContext->ClearState();
+                        ComPtr<ID3D11DeviceContext> executionContext;
+                        if (!config.fastContextSwitch)
+                        {
+                            // Use a deferred context so we can use the context saving feature.
+                            DX::ThrowIfFailed(deviceResources.device()->CreateDeferredContext(0, executionContext.GetAddressOf()));
+                            executionContext->ClearState();
+                        }
+                        else
+                        {
+                            executionContext.Attach(deviceResources.context());
+                        }
 
                         // Draw a quad to invoke our shader.
                         ID3D11RenderTargetView* const rtvs[] = { swapchainResources.runtimeTextureRtv[view.subImage.imageArrayIndex].Get() };
-                        deferredContext->OMSetRenderTargets(1, rtvs, nullptr);
-                        deferredContext->OMSetBlendState(nullptr, nullptr, 0xffffffff);
-                        deferredContext->OMSetDepthStencilState(nullptr, 0);
-                        deferredContext->VSSetShader(colorConversionVertexShader.Get(), nullptr, 0);
-                        deferredContext->PSSetShader(colorConversionPixelShader.Get(), nullptr, 0);
+                        executionContext->OMSetRenderTargets(1, rtvs, nullptr);
+                        executionContext->OMSetBlendState(nullptr, nullptr, 0xffffffff);
+                        executionContext->OMSetDepthStencilState(nullptr, 0);
+                        executionContext->VSSetShader(colorConversionVertexShader.Get(), nullptr, 0);
+                        executionContext->PSSetShader(colorConversionPixelShader.Get(), nullptr, 0);
                         ID3D11ShaderResourceView* const srvs[] = {
                             scalingMode == ScalingMode::Flat ? swapchainResources.appTextureSrv[view.subImage.imageArrayIndex].Get() : commonResources.intermediateTextureSrv[view.subImage.imageArrayIndex].Get()
                         };
-                        deferredContext->PSSetShaderResources(0, 1, srvs);
+                        executionContext->PSSetShaderResources(0, 1, srvs);
                         ID3D11SamplerState* const ss[] = { colorConversionSampler.Get() };
-                        deferredContext->PSSetSamplers(0, 1, ss);
-                        deferredContext->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
-                        deferredContext->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
-                        deferredContext->IASetInputLayout(nullptr);
-                        deferredContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+                        executionContext->PSSetSamplers(0, 1, ss);
+                        executionContext->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+                        executionContext->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+                        executionContext->IASetInputLayout(nullptr);
+                        executionContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
                         // TODO: Need to handle imageRect properly.
                         CD3D11_VIEWPORT viewport(0.f, 0.f, (float)actualDisplayWidth, (float)actualDisplayHeight);
-                        deferredContext->RSSetViewports(1, &viewport);
-                        deferredContext->RSSetState(imageInfo.sampleCount > 1 ? colorConversionRasterizerMSAA.Get() : colorConversionRasterizer.Get());
+                        executionContext->RSSetViewports(1, &viewport);
+                        executionContext->RSSetState(imageInfo.sampleCount > 1 ? colorConversionRasterizerMSAA.Get() : colorConversionRasterizer.Get());
 
-                        deferredContext->Draw(4, 0);
+                        executionContext->Draw(4, 0);
 
-                        // Execute the commands now and make sure we restore the context.
-                        ComPtr<ID3D11CommandList> commandList;
-                        DX::ThrowIfFailed(deferredContext->FinishCommandList(FALSE, commandList.GetAddressOf()));
-                        deviceResources.context()->ExecuteCommandList(commandList.Get(), TRUE);
+                        if (!config.fastContextSwitch)
+                        {
+                            // Execute the commands now and make sure we restore the context.
+                            ComPtr<ID3D11CommandList> commandList;
+                            DX::ThrowIfFailed(executionContext->FinishCommandList(FALSE, commandList.GetAddressOf()));
+                            deviceResources.context()->ExecuteCommandList(commandList.Get(), TRUE);
+                        }
+                        else
+                        {
+                            executionContext.Detach();
+                        }
 
                         StopTimer(scalingMode == ScalingMode::Flat ? commonResources.scalerTimer : commonResources.colorConversionTimer);
                     }
