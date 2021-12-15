@@ -88,6 +88,12 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         // The original texture returned by OpenXR.
         ID3D11Texture2D* runtimeTexture;
     };
+    struct GpuTimer
+    {
+        ComPtr<ID3D11Query> timeStampDis;
+        ComPtr<ID3D11Query> timeStampStart;
+        ComPtr<ID3D11Query> timeStampEnd;
+    };
     struct ScalerResources
     {
         // The swapchain info as requested by the application.
@@ -104,6 +110,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
         // The resources for each swapchain image.
         std::vector<SwapchainImageResources> imageResources;
+
+        // GPU timers.
+        mutable GpuTimer scalerTimer;
+        mutable GpuTimer colorConversionTimer;
     };
     std::map<XrSwapchain, ScalerResources> scalerResources;
     std::map<XrSwapchain, uint32_t> swapchainIndices;
@@ -114,6 +124,26 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     ComPtr<ID3D11SamplerState> colorConversionSampler;
     ComPtr<ID3D11RasterizerState> colorConversionRasterizer;
     ComPtr<ID3D11RasterizerState> colorConversionRasterizerMSAA;
+
+    // Statistics.
+    const uint64_t StatsPeriodMs = 60000;
+    struct Statistics
+    {
+        uint64_t windowBeginning;
+        uint64_t nextWindow;
+
+        uint64_t totalScalerTime;
+        uint64_t totalColorConversionTime;
+
+        uint32_t numFrames;
+
+        void Reset()
+        {
+            totalScalerTime = totalColorConversionTime = 0;
+            numFrames = 0;
+        }
+    };
+    Statistics stats;
 
     // Interactive state (for use with hotkeys).
     enum ScalingMode
@@ -133,6 +163,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         float sharpness;
         bool disableBilinearScaler;
         DXGI_FORMAT intermediateFormat;
+        bool enableStats;
 
         void Dump()
         {
@@ -144,7 +175,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 #else
                     false;
 #endif
-                if (isDebugBuild)
+                if (isDebugBuild || config.enableStats)
                 {
                     Log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                     Log("!!! USING DEBUG SETTINGS - PERFORMANCE WILL BE DECREASED             !!!\n");
@@ -171,6 +202,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             sharpness = 0.5f;
             disableBilinearScaler = false;
             intermediateFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
+            enableStats = false;
         }
     } config;
 
@@ -257,6 +289,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         {
                             config.intermediateFormat = (DXGI_FORMAT)std::stoi(value);
                         }
+                        else if (name == "enable_stats")
+                        {
+                            config.enableStats = value == "1" || value == "true";
+                        }
                     }
                 }
                 catch (...)
@@ -341,6 +377,52 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const XrSwapchain swapchain)
     {
         return scalerResources.find(swapchain) != scalerResources.cend();
+    }
+
+    void InitTimer(GpuTimer& timer)
+    {
+        D3D11_QUERY_DESC queryDesc;
+        ZeroMemory(&queryDesc, sizeof(D3D11_QUERY_DESC));
+        queryDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+        DX::ThrowIfFailed(deviceResources.device()->CreateQuery(&queryDesc, timer.timeStampDis.GetAddressOf()));
+        queryDesc.Query = D3D11_QUERY_TIMESTAMP;
+        DX::ThrowIfFailed(deviceResources.device()->CreateQuery(&queryDesc, timer.timeStampStart.GetAddressOf()));
+        DX::ThrowIfFailed(deviceResources.device()->CreateQuery(&queryDesc, timer.timeStampEnd.GetAddressOf()));
+    }
+
+    void StartTimer(GpuTimer& timer)
+    {
+        if (timer.timeStampDis)
+        {
+            deviceResources.context()->Begin(timer.timeStampDis.Get());
+            deviceResources.context()->End(timer.timeStampStart.Get());
+        }
+    }
+
+    void StopTimer(GpuTimer& timer)
+    {
+        if (timer.timeStampDis)
+        {
+            deviceResources.context()->End(timer.timeStampEnd.Get());
+            deviceResources.context()->End(timer.timeStampDis.Get());
+        }
+    }
+
+    uint64_t QueryTimer(GpuTimer& timer)
+    {
+        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disData;
+        UINT64 startime;
+        UINT64 endtime;
+
+        if (timer.timeStampDis &&
+            deviceResources.context()->GetData(timer.timeStampDis.Get(), &disData, sizeof(D3D11_QUERY_DATA_TIMESTAMP_DISJOINT), 0) == S_OK &&
+            deviceResources.context()->GetData(timer.timeStampStart.Get(), &startime, sizeof(UINT64), 0) == S_OK &&
+            deviceResources.context()->GetData(timer.timeStampEnd.Get(), &endtime, sizeof(UINT64), 0) == S_OK &&
+            !disData.Disjoint)
+        {
+            return (uint64_t)((endtime - startime) / double(disData.Frequency) * 1e6);
+        }
+        return 0;
     }
 
     // We override this OpenXR API in order to return the desired rendering resolution to the application.
@@ -491,6 +573,11 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
             scalingMode = ScalingMode::NIS;
             newSharpness = config.sharpness;
+
+            // Make the first update quicker.
+            stats.windowBeginning = GetTickCount64();
+            stats.nextWindow = stats.windowBeginning + StatsPeriodMs / 10;
+            stats.Reset();
         }
 
         DebugLog("<-- NISScaler_xrCreateSession %d\n", result);
@@ -770,6 +857,13 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // Let the app use our downscaled texture and keep track of the resources to use during xrEndFrame().
                     d3dImages[i].texture = resources.appTexture.Get();
                 }
+
+                // Create the GPU timers.
+                if (config.enableStats)
+                {
+                    InitTimer(commonResources.scalerTimer);
+                    InitTimer(commonResources.colorConversionTimer);
+                }
             }
             catch (std::runtime_error exc)
             {
@@ -812,7 +906,11 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const XrSession session,
         const XrFrameEndInfo* const frameEndInfo)
     {
+        static ScalingMode lastFrameScalingMode = scalingMode;
+
         DebugLog("--> NISScaler_xrEndFrame\n");
+
+        stats.numFrames++;
 
         // Check keyboard input.
         HandleHotkeys();
@@ -841,6 +939,27 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     const bool indirectMode = IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format);
                     const bool needColorConversion = !isIntermediateFormatCompatible;
 
+                    // Update the statistics.
+                    if (config.enableStats)
+                    {
+                        stats.totalScalerTime += QueryTimer(commonResources.scalerTimer);
+                        stats.totalColorConversionTime += QueryTimer(commonResources.colorConversionTimer);
+
+                        const uint64_t now = GetTickCount64();
+                        if (now >= stats.nextWindow || (scalingMode != lastFrameScalingMode && stats.numFrames))
+                        {
+                            Log("numFrames=%u (%u fps), scalerTime=%lu, colorConversionTime=%lu\n",
+                                stats.numFrames, (1000 * stats.numFrames) / (now - stats.windowBeginning),
+                                stats.totalScalerTime / stats.numFrames,
+                                stats.totalColorConversionTime / stats.numFrames);
+
+                            stats.Reset();
+
+                            stats.windowBeginning = now;
+                            stats.nextWindow = stats.windowBeginning + StatsPeriodMs;
+                        }
+                    }
+
                     // Adjust the scaler's settings if needed.
                     if (abs(config.sharpness - newSharpness) > FLT_EPSILON)
                     {
@@ -865,6 +984,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     ID3D11UnorderedAccessView* const uav = swapchainResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
                     if (scalingMode == ScalingMode::NIS)
                     {
+                        StartTimer(commonResources.scalerTimer);
                         if (commonResources.NISScaler)
                         {
                             commonResources.NISScaler->dispatch(&srv, &uav);
@@ -873,10 +993,13 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         {
                             commonResources.NISSharpen->dispatch(&srv, &uav);
                         }
+                        StopTimer(commonResources.scalerTimer);
                     }
                     else if (scalingMode == ScalingMode::Bilinear)
                     {
+                        StartTimer(commonResources.scalerTimer);
                         commonResources.bilinearScaler->dispatch(&srv, &uav);
+                        StopTimer(commonResources.scalerTimer);
                     }
 
                     // This call is needed to avoid D3D debug layer warning.
@@ -885,6 +1008,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // Perform color conversion if needed. We also reuse this (basic) shader to perform unfiltered upscale for comparison.
                     if (needColorConversion || scalingMode == ScalingMode::Flat)
                     {
+                        StartTimer(scalingMode == ScalingMode::Flat ? commonResources.scalerTimer : commonResources.colorConversionTimer);
+
                         // Use a deferred context so we can use the context saving feature.
                         // TODO: We could maybe bypass the context saving/restore by fully configuring the context with the minimum we need.
                         ComPtr<ID3D11DeviceContext> deferredContext;
@@ -921,6 +1046,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         ComPtr<ID3D11CommandList> commandList;
                         DX::ThrowIfFailed(deferredContext->FinishCommandList(FALSE, commandList.GetAddressOf()));
                         deviceResources.context()->ExecuteCommandList(commandList.Get(), TRUE);
+
+                        StopTimer(scalingMode == ScalingMode::Flat ? commonResources.scalerTimer : commonResources.colorConversionTimer);
                     }
 
                     // Forward the real texture size to OpenXR.
@@ -945,6 +1072,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                 }
             }
         }
+
+        lastFrameScalingMode = scalingMode;
 
         // Call the chain to perform the actual submission.
         const XrResult result = next_xrEndFrame(session, frameEndInfo);
