@@ -75,10 +75,11 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
     // Scalers state and resources.
     bool isIntermediateFormatCompatible = false;
+    bool needBindUnorderedAccessWorkaround = false;
     struct SwapchainImageResources
     {
         // Resources needed by the scaler.
-        ComPtr<ID3D11UnorderedAccessView> runtimeTextureUav[2];
+        ComPtr<ID3D11UnorderedAccessView> upscaledTextureUav[2];
         ComPtr<ID3D11Texture2D> appTexture;
         ComPtr<ID3D11ShaderResourceView> appTextureSrv[2];
 
@@ -524,6 +525,15 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                             }
                         }
 
+                        if (needBindUnorderedAccessWorkaround)
+                        {
+                            if (isIntermediateFormatCompatible)
+                            {
+                                Log("Using BindUnorderedAccess workaround.\n");
+                            }
+                            isIntermediateFormatCompatible = false;
+                        }
+
                         // Initialize resources for color conversion (in case we actually need it). We also use this for the unfiltered (flat) scaling mode.
                         ComPtr<ID3DBlob> errors;
 
@@ -837,24 +847,17 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
                         D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
                         ZeroMemory(&uavDesc, sizeof(D3D11_UNORDERED_ACCESS_VIEW_DESC));
-                        if (!indirectMode)
-                        {
-                            uavDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                        }
-                        else
-                        {
-                            uavDesc.Format = config.intermediateFormat;
-                        }
+                        uavDesc.Format = !indirectMode ? (DXGI_FORMAT)imageInfo.format : config.intermediateFormat;
                         uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
                         uavDesc.Texture2DArray.MipSlice = 0;
                         uavDesc.Texture2DArray.ArraySize = 1;
                         uavDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
                         ID3D11Resource* const targetTexture = needColorConversion ? commonResources.intermediateTexture.Get() : resources.runtimeTexture;
-                        DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(targetTexture, &uavDesc, resources.runtimeTextureUav[j].GetAddressOf()));
+                        DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(targetTexture, &uavDesc, resources.upscaledTextureUav[j].GetAddressOf()));
 
                         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
                         ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
-                        rtvDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                        rtvDesc.Format = !indirectMode || !isIntermediateFormatCompatible ? (DXGI_FORMAT)imageInfo.format : config.intermediateFormat;
                         rtvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_RTV_DIMENSION_TEXTURE2D : D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
                         rtvDesc.Texture2DArray.MipSlice = 0;
                         rtvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
@@ -925,6 +928,12 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         // Check keyboard input.
         HandleHotkeys();
 
+        // Unbind any RTV to avoid D3D debug layer warning.
+        {
+            ID3D11RenderTargetView* const rtvs[] = { nullptr };
+            deviceResources.context()->OMSetRenderTargets(1, rtvs, nullptr);
+        }
+
         // Go through each projection layer.
         std::vector<const XrCompositionLayerBaseHeader*> layers(frameEndInfo->layerCount);
         for (uint32_t i = 0; i < frameEndInfo->layerCount; i++)
@@ -991,7 +1000,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // Invoke the scaler.
                     // TODO: Need to handle imageRect properly.
                     ID3D11ShaderResourceView* const srv = swapchainResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
-                    ID3D11UnorderedAccessView* const uav = swapchainResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
+                    ID3D11UnorderedAccessView* const uav = swapchainResources.upscaledTextureUav[view.subImage.imageArrayIndex].Get();
                     if (scalingMode == ScalingMode::NIS)
                     {
                         StartTimer(commonResources.scalerTimer);
@@ -1004,16 +1013,21 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                             commonResources.NISSharpen->dispatch(&srv, &uav);
                         }
                         StopTimer(commonResources.scalerTimer);
+
+                        // Unbind the UAV to avoid D3D debug layer warning.
+                        ID3D11UnorderedAccessView* const uavs = { nullptr };
+                        deviceResources.context()->CSSetUnorderedAccessViews(0, 1, &uavs, nullptr);
                     }
                     else if (scalingMode == ScalingMode::Bilinear)
                     {
                         StartTimer(commonResources.scalerTimer);
                         commonResources.bilinearScaler->dispatch(&srv, &uav);
                         StopTimer(commonResources.scalerTimer);
-                    }
 
-                    // This call is needed to avoid D3D debug layer warning.
-                    deviceResources.context()->OMSetRenderTargets(0, nullptr, nullptr);
+                        // Unbind the UAV to avoid D3D debug layer warning.
+                        ID3D11UnorderedAccessView* const uavs = { nullptr };
+                        deviceResources.context()->CSSetUnorderedAccessViews(1, 1, &uavs, nullptr);
+                    }
 
                     // Perform color conversion if needed. We also reuse this (basic) shader to perform unfiltered upscale for comparison.
                     if (needColorConversion || scalingMode == ScalingMode::Flat)
@@ -1183,8 +1197,11 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             if (next_xrGetInstanceProcAddr(*instance, "xrGetInstanceProperties", reinterpret_cast<PFN_xrVoidFunction*>(&xrGetInstanceProperties)) == XR_SUCCESS &&
                 xrGetInstanceProperties(*instance, &instanceProperties) == XR_SUCCESS)
             {
-                Log("Using OpenXR runtime %s, version %u.%u.%u\n", instanceProperties.runtimeName,
+                const std::string runtimeName(instanceProperties.runtimeName);
+                Log("Using OpenXR runtime %s, version %u.%u.%u\n", runtimeName.c_str(),
                     XR_VERSION_MAJOR(instanceProperties.runtimeVersion), XR_VERSION_MINOR(instanceProperties.runtimeVersion), XR_VERSION_PATCH(instanceProperties.runtimeVersion));
+
+                needBindUnorderedAccessWorkaround = runtimeName.find("SteamVR") != std::string::npos;
             }
 
             next_xrGetInstanceProcAddr(*instance, "xrEnumerateSwapchainFormats", reinterpret_cast<PFN_xrVoidFunction*>(&next_xrEnumerateSwapchainFormats));
