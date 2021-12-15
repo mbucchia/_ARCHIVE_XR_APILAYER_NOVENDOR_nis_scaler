@@ -94,6 +94,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         ComPtr<ID3D11Query> timeStampDis;
         ComPtr<ID3D11Query> timeStampStart;
         ComPtr<ID3D11Query> timeStampEnd;
+        bool valid;
     };
     struct ScalerResources
     {
@@ -399,6 +400,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         queryDesc.Query = D3D11_QUERY_TIMESTAMP;
         DX::ThrowIfFailed(deviceResources.device()->CreateQuery(&queryDesc, timer.timeStampStart.GetAddressOf()));
         DX::ThrowIfFailed(deviceResources.device()->CreateQuery(&queryDesc, timer.timeStampEnd.GetAddressOf()));
+        timer.valid = false;
     }
 
     void StartTimer(GpuTimer& timer)
@@ -416,6 +418,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         {
             deviceResources.context()->End(timer.timeStampEnd.Get());
             deviceResources.context()->End(timer.timeStampDis.Get());
+            timer.valid = true;
         }
     }
 
@@ -425,12 +428,13 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         UINT64 startime;
         UINT64 endtime;
 
-        if (timer.timeStampDis &&
+        if (timer.valid && timer.timeStampDis &&
             deviceResources.context()->GetData(timer.timeStampDis.Get(), &disData, sizeof(D3D11_QUERY_DATA_TIMESTAMP_DISJOINT), 0) == S_OK &&
             deviceResources.context()->GetData(timer.timeStampStart.Get(), &startime, sizeof(UINT64), 0) == S_OK &&
             deviceResources.context()->GetData(timer.timeStampEnd.Get(), &endtime, sizeof(UINT64), 0) == S_OK &&
             !disData.Disjoint)
         {
+            timer.valid = false;
             return (uint64_t)((endtime - startime) / double(disData.Frequency) * 1e6);
         }
         return 0;
