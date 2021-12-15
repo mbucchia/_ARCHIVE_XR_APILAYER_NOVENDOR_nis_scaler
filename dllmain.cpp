@@ -206,9 +206,9 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             loaded = false;
             scaleFactor = 0.7f;
             sharpness = 0.5f;
-            disableBilinearScaler = false;
+            disableBilinearScaler = true;
             intermediateFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
-            fastContextSwitch = false;
+            fastContextSwitch = true;
             enableStats = false;
         }
     } config;
@@ -328,7 +328,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     {
         static bool wasF1Pressed = false;
         const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
-        if (!wasF1Pressed && isF1Pressed && !config.disableBilinearScaler)
+        if (!wasF1Pressed && isF1Pressed)
         {
             do
             {
