@@ -68,7 +68,7 @@ sharpness=0.4
 
 Changing the sharpness setting can be done in increments of 5% by pressing Ctrl + Down arrow (or Ctrl + F2) to decrease and Ctrl + Up arrow (or Ctrl + F3) to increase. The new sharpness value can be observed in the log file (typically stored at `%LocalAppData%\XR_APILAYER_NOVENDOR_nis_scaler.log`). When satisfied, you may then modify the configuration file corresponding to the application to make the setting permanent.
 
-You can use Ctrl + Left arrow (or Ctrl + F1) to enable/disable NIS and switch to a bilinear scaler (cheap scaler) instead, so you can see the improvements (hopefully) that NIS provides.
+You can use Ctrl + Left arrow (or Ctrl + F1) to enable/disable NIS and switch to a cheap scaler (no filter) instead, so you can see the improvements (hopefully) that NIS provides.
 
 Changing the render scale cannot be done via a keyboard shortcut and requires the VR session to be restarted with an updated configuration file.
 
