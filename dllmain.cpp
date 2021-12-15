@@ -113,6 +113,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     ComPtr<ID3D11PixelShader> colorConversionPixelShader;
     ComPtr<ID3D11SamplerState> colorConversionSampler;
     ComPtr<ID3D11RasterizerState> colorConversionRasterizer;
+    ComPtr<ID3D11RasterizerState> colorConversionRasterizerMSAA;
 
     // Interactive state (for use with hotkeys).
     enum ScalingMode
@@ -466,6 +467,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         rsDesc.CullMode = D3D11_CULL_NONE;
                         rsDesc.FrontCounterClockwise = TRUE;
                         DX::ThrowIfFailed(d3d11Device->CreateRasterizerState(&rsDesc, colorConversionRasterizer.GetAddressOf()));
+                        rsDesc.MultisampleEnable = TRUE;
+                        DX::ThrowIfFailed(d3d11Device->CreateRasterizerState(&rsDesc, colorConversionRasterizerMSAA.GetAddressOf()));
                     }
                     else if (entry->type == XR_TYPE_GRAPHICS_BINDING_D3D12_KHR)
                     {
@@ -509,6 +512,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             scalerResources.clear();
             swapchainIndices.clear();
             colorConversionRasterizer = nullptr;
+            colorConversionRasterizerMSAA = nullptr;
             colorConversionSampler = nullptr;
             colorConversionPixelShader = nullptr;
             colorConversionVertexShader = nullptr;
@@ -909,7 +913,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         // TODO: Need to handle imageRect properly.
                         CD3D11_VIEWPORT viewport(0.f, 0.f, (float)actualDisplayWidth, (float)actualDisplayHeight);
                         deferredContext->RSSetViewports(1, &viewport);
-                        deferredContext->RSSetState(colorConversionRasterizer.Get());
+                        deferredContext->RSSetState(imageInfo.sampleCount > 1 ? colorConversionRasterizerMSAA.Get() : colorConversionRasterizer.Get());
 
                         deferredContext->Draw(4, 0);
 
