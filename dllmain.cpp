@@ -30,6 +30,7 @@ namespace {
     const std::string LayerName = "XR_APILAYER_NOVENDOR_nis_scaler";
     const std::string VersionString = "Alpha4";
 
+    // TODO: Optimize the VS to only draw 1 triangle and use clipping.
     const std::string colorConversionShadersSource = R"_(
 Texture2D srcTex;
 SamplerState srcSampler;
@@ -81,7 +82,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         ComPtr<ID3D11Texture2D> appTexture;
         ComPtr<ID3D11ShaderResourceView> appTextureSrv[2];
 
-        // Resources for indirect color conversion mode.
+        // Resources needed for flat upscaling and color conversion.
         ComPtr<ID3D11RenderTargetView> runtimeTextureRtv[2];
 
         // The original texture returned by OpenXR.
@@ -114,7 +115,13 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     ComPtr<ID3D11RasterizerState> colorConversionRasterizer;
 
     // Interactive state (for use with hotkeys).
-    bool useBilinearScaler = false;
+    enum ScalingMode
+    {
+        Flat = 0,
+        Bilinear,
+        NIS,
+        EnumMax
+    } scalingMode;
     float newSharpness;
 
     void Log(const char* fmt, ...);
@@ -291,7 +298,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const bool isF1Pressed = GetAsyncKeyState(VK_CONTROL) && (GetAsyncKeyState(VK_LEFT) || GetAsyncKeyState(VK_F1));
         if (!wasF1Pressed && isF1Pressed && !config.disableBilinearScaler)
         {
-            useBilinearScaler = !useBilinearScaler;
+            do
+            {
+                scalingMode = (ScalingMode)((scalingMode + 1) % ScalingMode::EnumMax);
+            } while (config.disableBilinearScaler && scalingMode == ScalingMode::Bilinear);
         }
         wasF1Pressed = isF1Pressed;
 
@@ -559,7 +569,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                 Log("Error: %s\n", exc.what());
             }
 
-            useBilinearScaler = false;
+            scalingMode = ScalingMode::NIS;
             newSharpness = config.sharpness;
         }
 
@@ -779,7 +789,6 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, resources.appTexture.GetAddressOf()));
 
                     // Create an intermediate texture for color conversion. This texture is compatible with the scaler's output.
-                    // TODO: Investigate doing this through a TYPELESS instead... Would be better performance.
                     if (needColorConversion && i == 0)
                     {
                         textureDesc.Width = actualDisplayWidth;
@@ -829,17 +838,14 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         ID3D11Resource* const targetTexture = needColorConversion ? commonResources.intermediateTexture.Get() : resources.runtimeTexture;
                         DX::ThrowIfFailed(deviceResources.device()->CreateUnorderedAccessView(targetTexture, &uavDesc, resources.runtimeTextureUav[j].GetAddressOf()));
 
-                        if (needColorConversion)
-                        {
-                            D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
-                            ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
-                            rtvDesc.Format = (DXGI_FORMAT)imageInfo.format;
-                            rtvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_RTV_DIMENSION_TEXTURE2D : D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-                            rtvDesc.Texture2DArray.MipSlice = 0;
-                            rtvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
-                            rtvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
-                            DX::ThrowIfFailed(deviceResources.device()->CreateRenderTargetView(resources.runtimeTexture, &rtvDesc, resources.runtimeTextureRtv[j].GetAddressOf()));
-                        }
+                        D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+                        ZeroMemory(&rtvDesc, sizeof(D3D11_RENDER_TARGET_VIEW_DESC));
+                        rtvDesc.Format = (DXGI_FORMAT)imageInfo.format;
+                        rtvDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_RTV_DIMENSION_TEXTURE2D : D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                        rtvDesc.Texture2DArray.MipSlice = 0;
+                        rtvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
+                        rtvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
+                        DX::ThrowIfFailed(deviceResources.device()->CreateRenderTargetView(resources.runtimeTexture, &rtvDesc, resources.runtimeTextureRtv[j].GetAddressOf()));
 
                         commonResources.imageResources.push_back(resources);
                     }
@@ -940,7 +946,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // TODO: Need to handle imageRect properly.
                     ID3D11ShaderResourceView* const srv = swapchainResources.appTextureSrv[view.subImage.imageArrayIndex].Get();
                     ID3D11UnorderedAccessView* const uav = swapchainResources.runtimeTextureUav[view.subImage.imageArrayIndex].Get();
-                    if (!useBilinearScaler || !commonResources.bilinearScaler)
+                    if (scalingMode == ScalingMode::NIS)
                     {
                         if (commonResources.NISScaler)
                         {
@@ -951,7 +957,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                             commonResources.NISSharpen->dispatch(&srv, &uav);
                         }
                     }
-                    else
+                    else if (scalingMode == ScalingMode::Bilinear)
                     {
                         commonResources.bilinearScaler->dispatch(&srv, &uav);
                     }
@@ -959,8 +965,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // This call is needed to avoid D3D debug layer warning.
                     deviceResources.context()->OMSetRenderTargets(0, nullptr, nullptr);
 
-                    // Perform color conversion if needed.
-                    if (needColorConversion)
+                    // Perform color conversion if needed. We also reuse this (basic) shader to perform unfiltered upscale for comparison.
+                    if (needColorConversion || scalingMode == ScalingMode::Flat)
                     {
                         // Use a deferred context so we can use the context saving feature.
                         // TODO: We could maybe bypass the context saving/restore by fully configuring the context with the minimum we need.
@@ -969,14 +975,16 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
                         deferredContext->ClearState();
 
-                        // Draw a quad to invoke our conversion shader.
+                        // Draw a quad to invoke our shader.
                         ID3D11RenderTargetView* const rtvs[] = { swapchainResources.runtimeTextureRtv[view.subImage.imageArrayIndex].Get() };
                         deferredContext->OMSetRenderTargets(1, rtvs, nullptr);
                         deferredContext->OMSetBlendState(nullptr, nullptr, 0xffffffff);
                         deferredContext->OMSetDepthStencilState(nullptr, 0);
                         deferredContext->VSSetShader(colorConversionVertexShader.Get(), nullptr, 0);
                         deferredContext->PSSetShader(colorConversionPixelShader.Get(), nullptr, 0);
-                        ID3D11ShaderResourceView* const srvs[] = { commonResources.intermediateTextureSrv[view.subImage.imageArrayIndex].Get() };
+                        ID3D11ShaderResourceView* const srvs[] = {
+                            scalingMode == ScalingMode::Flat ? swapchainResources.appTextureSrv[view.subImage.imageArrayIndex].Get() : commonResources.intermediateTextureSrv[view.subImage.imageArrayIndex].Get()
+                        };
                         deferredContext->PSSetShaderResources(0, 1, srvs);
                         ID3D11SamplerState* const ss[] = { colorConversionSampler.Get() };
                         deferredContext->PSSetSamplers(0, 1, ss);
