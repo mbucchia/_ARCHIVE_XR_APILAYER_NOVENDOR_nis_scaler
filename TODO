@@ -1,18 +1,13 @@
-Improvements:
-
-* Investigate issue with dark scenes (reported on MSFS forum)
-* Integrate CptLucky8 exposure change
-
 Performance work:
 
-* Investigate how to remove the color space conversion when using SteamVR
-** If not: optimize the vertex shader to only draw one triangle and use clipping
+* Optimize the vertex shader to only draw one triangle and use clipping
 * Add a switch to toggle half-precision floats
 
 Feature work:
 
 * Implement support for Direct3D 12 using D3D11on12
 * Add brightness/contrast/saturation to the shader
+* Integrate CptLucky8 exposure change
 * Investigate (again) the FOV modifier idea (discussed on MSFS forum)
 * Implement preset hotkeys(?)
 * Implement an overlay UI(?)

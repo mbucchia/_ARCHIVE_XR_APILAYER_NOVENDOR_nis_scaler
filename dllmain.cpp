@@ -37,10 +37,10 @@ SamplerState srcSampler;
 
 void vsMain(in uint id : SV_VertexID, out float4 position : SV_Position, out float2 texcoord : TEXCOORD0)
 {
-        texcoord.x = (id == 2) ?  2.0 :  0.0;
-        texcoord.y = (id == 1) ?  2.0 :  0.0;
+    texcoord.x = (id == 2) ?  2.0 :  0.0;
+    texcoord.y = (id == 1) ?  2.0 :  0.0;
 
-        position = float4(texcoord * float2(2.0, -2.0) + float2(-1.0, 1.0), 1.0, 1.0);
+    position = float4(texcoord * float2(2.0, -2.0) + float2(-1.0, 1.0), 1.0, 1.0);
 }
 
 float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) : SV_TARGET {
@@ -74,7 +74,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     DeviceResources deviceResources;
 
     // Scalers state and resources.
-    DXGI_FORMAT indirectFormat = DXGI_FORMAT_UNKNOWN;
+    bool isIntermediateFormatCompatible = false;
     struct SwapchainImageResources
     {
         // Resources needed by the scaler.
@@ -98,7 +98,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         std::shared_ptr<NVScaler> NISScaler;
         std::shared_ptr<NVSharpen> NISSharpen;
 
-        // Common resources for indirect color conversion mode.
+        // Common resources for color conversion mode.
         ComPtr<ID3D11Texture2D> intermediateTexture;
         ComPtr<ID3D11ShaderResourceView> intermediateTextureSrv[2];
 
@@ -130,9 +130,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         bool loaded;
         float scaleFactor;
         float sharpness;
-        bool onlyAdvertiseCapableFormats;
-        bool prioritizeCapableFormats;
         bool disableBilinearScaler;
+        DXGI_FORMAT intermediateFormat;
 
         void Dump()
         {
@@ -150,18 +149,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     Log("!!! USING DEBUG SETTINGS - PERFORMANCE WILL BE DECREASED             !!!\n");
                     Log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                 }
-                if (onlyAdvertiseCapableFormats)
-                {
-                    Log("Only advertise texture formats supported by this layer\n");
-                }
-                else
-                {
-                    Log("Advertise all texture formats\n");
-                    if (prioritizeCapableFormats)
-                    {
-                        Log("Prioritize capable formats\n");
-                    }
-                }
+
+                Log("Using intermediate format: %d\n", intermediateFormat);
                 if (scaleFactor < 1.f)
                 {
                     Log("Use scaling factor: %.3f\n", scaleFactor);
@@ -179,9 +168,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             loaded = false;
             scaleFactor = 0.7f;
             sharpness = 0.5f;
-            onlyAdvertiseCapableFormats = false;
-            prioritizeCapableFormats = true;
             disableBilinearScaler = false;
+            intermediateFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
         }
     } config;
 
@@ -260,17 +248,13 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         {
                             config.sharpness = std::clamp(std::stof(value), 0.f, 1.f);
                         }
-                        else if (name == "only_advertise_capable_formats")
-                        {
-                            config.onlyAdvertiseCapableFormats = value == "1" || value == "true";
-                        }
-                        else if (name == "prioritize_capable_formats")
-                        {
-                            config.prioritizeCapableFormats = value == "1" || value == "true";
-                        }
                         else if (name == "disable_bilinear_scaler")
                         {
                             config.disableBilinearScaler = value == "1" || value == "true";
+                        }
+                        else if (name == "intermediate_format")
+                        {
+                            config.intermediateFormat = (DXGI_FORMAT)std::stoi(value);
                         }
                     }
                 }
@@ -335,7 +319,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             || format == DXGI_FORMAT_R8G8B8A8_SINT;
     }
 
-    // Returns whether a texture format is indirectly supported by he NIS shader/
+    // Returns whether a texture format is indirectly supported by the NIS shader.
     // Indirectly means that we implement a conversion path from this format to a supported format.
     bool IsIndirectlySupportedColorFormat(
         const DXGI_FORMAT format)
@@ -404,89 +388,6 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         return result;
     }
 
-    // We override this OpenXR API in order to prioritize our preferred texture formats.
-    XrResult NISScaler_xrEnumerateSwapchainFormats(
-        const XrSession session,
-        uint32_t formatCapacityInput,
-        uint32_t* const formatCountOutput,
-        int64_t* const formats)
-    {
-        DebugLog("--> NISScaler_xrEnumerateSwapchainFormats\n");
-
-        XrResult result;
-        int64_t* fullArrayOfFormats = nullptr;
-
-        // We might need to return a smaller array. Always allocate the full-size array.
-        result = next_xrEnumerateSwapchainFormats(session, 0, formatCountOutput, nullptr);
-        if (result == XR_SUCCESS && d3d11Device)
-        {
-            // TODO: Compliance: someone could've passed a smaller array...
-            formatCapacityInput = *formatCountOutput;
-            fullArrayOfFormats = new int64_t[formatCapacityInput];
-        }
-
-        // Call the chain to perform the actual operation. We always pass a full-size array.
-        result = next_xrEnumerateSwapchainFormats(session, formatCapacityInput, formatCountOutput, fullArrayOfFormats);
-        if (result == XR_SUCCESS && formatCapacityInput > 0)
-        {
-            if (config.onlyAdvertiseCapableFormats || config.prioritizeCapableFormats)
-            {
-                // Prioritize the formats that we can handle for scaling.
-                for (uint32_t i = 0; i < *formatCountOutput; i++)
-                {
-                    if (!IsSupportedColorFormat((DXGI_FORMAT)fullArrayOfFormats[i]) && !IsSupportedDepthFormat((DXGI_FORMAT)fullArrayOfFormats[i]))
-                    {
-                        for (uint32_t j = i + 1; j < *formatCountOutput; j++)
-                        {
-                            if (IsSupportedColorFormat((DXGI_FORMAT)fullArrayOfFormats[j]) || IsSupportedDepthFormat((DXGI_FORMAT)fullArrayOfFormats[j]))
-                            {
-                                std::swap(fullArrayOfFormats[i], fullArrayOfFormats[j]);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // If needed, do not advertise formats that cannot be handled by this layer.
-            if (config.onlyAdvertiseCapableFormats)
-            {
-                for (uint32_t i = 0; i < *formatCountOutput; i++)
-                {
-                    if (!IsSupportedColorFormat((DXGI_FORMAT)fullArrayOfFormats[i]) && !IsSupportedDepthFormat((DXGI_FORMAT)fullArrayOfFormats[i]))
-                    {
-                        *formatCountOutput = i + 1;
-                        break;
-                    }
-                }
-            }
-
-            // Select the format for indirect mode here.
-            for (uint32_t i = 0; i < *formatCountOutput; i++)
-            {
-                if (IsSupportedColorFormat((DXGI_FORMAT)fullArrayOfFormats[i]))
-                {
-                    indirectFormat = (DXGI_FORMAT)fullArrayOfFormats[i];
-                    break;
-                }
-            }
-
-            if (formats)
-            {
-                CopyMemory(formats, fullArrayOfFormats, *formatCountOutput * sizeof(uint64_t));
-            }
-        }
-
-        if (fullArrayOfFormats)
-        {
-            delete[] fullArrayOfFormats;
-        }
-
-        DebugLog("<-- NISScaler_xrEnumerateSwapchainFormats %d\n", result);
-
-        return result;
-    }
-
     // We override this OpenXR API in order to intercept the D3D device used by the application.
     // We also initialize some common resources.
     XrResult NISScaler_xrCreateSession(
@@ -514,7 +415,23 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         // HACK: See our DeviceResources implementation. We use the existing interface using an HWND pointer as an opaque pointer.
                         deviceResources.create(reinterpret_cast<HWND>(d3d11Device.Get()));
 
-                        // Initialize resources for color conversion (in case we actually need it).
+                        // Check whether we need color conversion.
+                        uint32_t formatsCount = 0;
+                        next_xrEnumerateSwapchainFormats(*session, 0, &formatsCount, nullptr);
+                        std::vector<int64_t> formats(formatsCount, {});
+                        if (next_xrEnumerateSwapchainFormats(*session, formatsCount, &formatsCount, formats.data()) == XR_SUCCESS)
+                        {
+                            for (auto format : formats)
+                            {
+                                if (format == config.intermediateFormat)
+                                {
+                                    isIntermediateFormatCompatible = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Initialize resources for color conversion (in case we actually need it). We also use this for the unfiltered (flat) scaling mode.
                         ComPtr<ID3DBlob> errors;
 
                         ComPtr<ID3DBlob> vsBytes;
@@ -632,19 +549,19 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             // Make sure this format is supported for a UAV.
             if (isIndirectlySupportedColorFormat)
             {
-                if (indirectFormat != DXGI_FORMAT_UNKNOWN)
+                if (isIntermediateFormatCompatible)
                 {
-                    Log("Using indirect texture format mapping with format %d\n", indirectFormat);
+                    Log("Using indirect texture format mapping\n");
 
-                    // Fallback to a format supported by the scaler, and rely on implicit color space conversion.
-                    chainCreateInfo.format = (uint64_t)indirectFormat;
+                    // Fallback to a format supported by the both the scaler and the runtime, and avoid the explicit color conversion pass.
+                    chainCreateInfo.format = (uint64_t)config.intermediateFormat;
 
                     // Add the flag to allow the textures to be the output of the scaler.
                     chainCreateInfo.usageFlags |= XR_SWAPCHAIN_USAGE_UNORDERED_ACCESS_BIT;
                 }
                 else
                 {
-                    Log("Using indirect texture format conversion\n");
+                    Log("Using indirect texture format with color conversion\n");
 
                     // Otherwise we keep the requested format, and we will have to do an extra pass for color mapping.
                 }
@@ -754,7 +671,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                 // Detect some properties for our resources.
                 const XrSwapchainCreateInfo& imageInfo = commonResources.swapchainInfo;
                 const bool indirectMode = IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format);
-                const bool needColorConversion = indirectMode && indirectFormat == DXGI_FORMAT_UNKNOWN;
+                const bool needColorConversion = !isIntermediateFormatCompatible;
                 for (uint32_t i = 0; i < *imageCountOutput; i++)
                 {
                     SwapchainImageResources resources;
@@ -793,7 +710,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     {
                         textureDesc.Width = actualDisplayWidth;
                         textureDesc.Height = actualDisplayHeight;
-                        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                        textureDesc.Format = config.intermediateFormat;
                         textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
                         DX::ThrowIfFailed(deviceResources.device()->CreateTexture2D(&textureDesc, nullptr, commonResources.intermediateTexture.GetAddressOf()));
                     }
@@ -813,7 +730,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
                         if (needColorConversion && i == 0)
                         {
-                            srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                            srvDesc.Format = config.intermediateFormat;
                             DX::ThrowIfFailed(deviceResources.device()->CreateShaderResourceView(commonResources.intermediateTexture.Get(), &srvDesc, commonResources.intermediateTextureSrv[j].GetAddressOf()));
                         }
 
@@ -823,13 +740,9 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         {
                             uavDesc.Format = (DXGI_FORMAT)imageInfo.format;
                         }
-                        else if (!needColorConversion)
-                        {
-                            uavDesc.Format = indirectFormat;
-                        }
                         else
                         {
-                            uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                            uavDesc.Format = config.intermediateFormat;
                         }
                         uavDesc.ViewDimension = imageInfo.arraySize == 1 ? D3D11_UAV_DIMENSION_TEXTURE2D : D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
                         uavDesc.Texture2DArray.MipSlice = 0;
@@ -922,7 +835,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     const XrSwapchainCreateInfo& imageInfo = commonResources.swapchainInfo;
                     const SwapchainImageResources& swapchainResources = commonResources.imageResources[swapchainIndices[view.subImage.swapchain]];
                     const bool indirectMode = IsIndirectlySupportedColorFormat((DXGI_FORMAT)imageInfo.format);
-                    const bool needColorConversion = indirectMode && indirectFormat == DXGI_FORMAT_UNKNOWN;
+                    const bool needColorConversion = !isIntermediateFormatCompatible;
 
                     // Adjust the scaler's settings if needed.
                     if (abs(config.sharpness - newSharpness) > FLT_EPSILON)
@@ -1059,7 +972,6 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             }
 
             INTERCEPT_CALL(xrEnumerateViewConfigurationViews);
-            INTERCEPT_CALL(xrEnumerateSwapchainFormats);
             INTERCEPT_CALL(xrCreateSwapchain);
             INTERCEPT_CALL(xrDestroySwapchain);
             INTERCEPT_CALL(xrEnumerateSwapchainImages);
@@ -1119,6 +1031,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                 Log("Using OpenXR runtime %s, version %u.%u.%u\n", instanceProperties.runtimeName,
                     XR_VERSION_MAJOR(instanceProperties.runtimeVersion), XR_VERSION_MINOR(instanceProperties.runtimeVersion), XR_VERSION_PATCH(instanceProperties.runtimeVersion));
             }
+
+            next_xrGetInstanceProcAddr(*instance, "xrEnumerateSwapchainFormats", reinterpret_cast<PFN_xrVoidFunction*>(&next_xrEnumerateSwapchainFormats));
 
             config.Reset();
 

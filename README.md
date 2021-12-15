@@ -90,4 +90,6 @@ Special thanks to BufordTX for submitting a fix for a bug in the installation sc
 
 Special thanks to CptLucky8 for spotting an issue with the instructions.
 
+Special thanks to HyperJet2018 and CptLucky8 for their input on resolving the sRGB color degrations issue.
+
 Many thanks to the https://forums.flightsimulator.com/ community for the testing and feedback!
