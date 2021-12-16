@@ -14,31 +14,35 @@ DISCLAIMER: This software is distributed as-is, without any warranties or condit
 This software may be used with any brand of VR headset as long as the target application is developed using OpenXR. The software has been confirmed to work with Windows Mixed Reality, Valve Index, HTC Vive, Pimax and Oculus Quest.
 This software may be used with any modern GPU, and is not limited to NVIDIA hardware.
 
-## Download
+## Installation
 
-A ZIP archive containing the necessary files to install and use the layer can be found on the release page: https://github.com/mbucchia/XR_APILAYER_NOVENDOR_nis_scaler/releases.
+Please visit the release page to download the installer for the latest version: https://github.com/mbucchia/XR_APILAYER_NOVENDOR_nis_scaler/releases.
 
-## Setup
+(For Windows Mixed Reality users) You may confirm that the software is properly installed/uninstalled by using the OpenXR Developer Tools for Windows Mixed Reality, check under the *System Status* tab, scroll down to *API Layers*. A layer named `XR_APILAYER_NOVENDOR_nis_scaler` is listed when the software is installed.
 
-1. Create a folder in `%ProgramFiles%`. It's important to make it in `%ProgramFiles%` so that UWP applications can access it! For example: `C:\Program Files\OpenXR-API-Layers`.
+## Configuration file
 
-2. Place the files extracted from the ZIP archive (`XR_APILAYER_NOVENDOR_nis_scaler.json`, `XR_APILAYER_NOVENDOR_nis_scaler.dll`, `NIS_Main.hlsl`, `NIS_Scaler.h`, `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` and `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1`) in the folder created above. Also copy any configuration file (eg: `FS2020.cfg`) to that folder.
+NOTE TO MICROSOFT FLIGHT SIMULATOR 2020 USERS: The installer already provides a base configuration file (`FS2020.cfg`) for Flight Simulator 2020!
 
-3. Run the script `Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1` by right-clicking on the file, then choosing "Run with PowerShell". You will be prompted for elevation (running as Administrator).
+The configuration file contains two values:
 
-4. (Optional) Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. A layer named `XR_APILAYER_NOVENDOR_nis_scaler` should be listed.
+* `scaling` (between 0 and 1), indicating the amount of upscaling to request;
+* `sharpness` (between 0 and 1), indicating the the amount of sharpness filtering to apply.
 
-## Removal
+The NIS scaling processing occurs after the in-game render scale scaling (if any) and before the OpenXR custom render scale scaling.
 
-1. Go to the folder where the API layer is installed. For example: `C:\Program Files\OpenXR-API-Layers`.
+Example configuration file with a scaling factor of 65% and sharpness of 40%:
 
-2. Run the script `Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1` by right-clicking on the file, then choosing "Run with PowerShell". You will be prompted for elevation (running as Administrator).
+```
+scaling=0.65
+sharpness=0.4
+```
 
-3. (Optional) Start the OpenXR Developer Tools for Windows Mixed Reality, under the *System Status* tab, scroll down to *API Layers*. There should be no layer named `XR_APILAYER_NOVENDOR_nis_scaler`.
+## Best practices
 
-## App configuration
+(_This section is still under construction_)
 
-NOTE TO Microsoft Flight Simulator 2020 USERS: The ZIP archive already contains a configuration file (`FS2020.cfg`) for Flight Simulator 2020! Just copy the file as part of Setup step 2) above!
+## Creating the configuration file
 
 In order to enable the software for a given application (eg: Microsoft Flight Simulator 2020 aka MSFS2020), a configuration file must be present for this application.
 
@@ -57,12 +61,7 @@ Could not load config for "Zouna"
 
 4. In the same folder where `XR_APILAYER_NOVENDOR_nis_scaler.json` was copied during setup, create a file with a name matching the application name and with the extension `.cfg`. For our example `C:\Program Files\OpenXR-API-Layers\FS2020.cfg`.
 
-5. (Optional) In this configuration file, you may change the `scaling` value to specify the amount of upscaling to request (default is 0.7, which means 70%). You may also specify a value for `sharpness` between 0 and 1 (default is 0.5). Example configuration file with a scaling factor of 65% and sharpness of 40%:
-
-```
-scaling=0.65
-sharpness=0.4
-```
+5. Update the file with the designed settings.
 
 ## Keyboard shortcuts
 

@@ -79,10 +79,8 @@
     <None Include="Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1" />
     <None Include="XR_APILAYER_NOVENDOR_nis_scaler.json" />
     <None Include="TODO" />
-  </ItemGroup>
-  <ItemGroup>
-    <FxCompile Include="NVIDIAImageScaling\NIS\NIS_Main.hlsl">
+    <None Include="NVIDIAImageScaling\NIS\NIS_Main.hlsl">
       <Filter>NVIDIAImageScaling\NIS</Filter>
-    </FxCompile>
+    </None>
   </ItemGroup>
 </Project>

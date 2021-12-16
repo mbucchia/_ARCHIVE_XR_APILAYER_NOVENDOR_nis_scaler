@@ -52,6 +52,9 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     // The path where the DLL loads config files and stores logs.
     std::string dllHome;
 
+    // The path to find the NIS shader source.
+    std::string nisShaderHome;
+
     // The file logger.
     std::ofstream logStream;
 
@@ -706,12 +709,12 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     }
                     if (config.scaleFactor < 1.f)
                     {
-                        resources.NISScaler = std::make_shared<NVScaler>(deviceResources, dllHome);
+                        resources.NISScaler = std::make_shared<NVScaler>(deviceResources, nisShaderHome);
                         resources.NISScaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
                     else
                     {
-                        resources.NISSharpen = std::make_shared<NVSharpen>(deviceResources, dllHome);
+                        resources.NISSharpen = std::make_shared<NVSharpen>(deviceResources, nisShaderHome);
                         resources.NISSharpen->update(config.sharpness, createInfo->width, createInfo->height);
                     }
 
@@ -1250,7 +1253,9 @@ extern "C" {
             {
                 // Falling back to loading config/writing logs to the current working directory.
                 DebugLog("Failed to locate DLL\n");
-            }            
+            }
+
+            nisShaderHome = (std::filesystem::path(dllHome) / std::filesystem::path("NVIDIAImageScaling") / std::filesystem::path("NIS")).string();
         }
 
         // Start logging to file.

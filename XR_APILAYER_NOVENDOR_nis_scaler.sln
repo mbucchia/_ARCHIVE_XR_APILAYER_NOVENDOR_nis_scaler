@@ -5,6 +5,10 @@ VisualStudioVersion = 16.0.31205.134
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XR_APILAYER_NOVENDOR_nis_scaler", "XR_APILAYER_NOVENDOR_nis_scaler.vcxproj", "{92E50B91-2FA3-48A0-B7F7-E04D7790E15B}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Setup", "Setup\Setup.vdproj", "{D2E9DCA8-E7E5-41C1-AF83-33A3ACBB18B3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SetupCustomActions", "Setup\SetupCustomActions\SetupCustomActions.csproj", "{8B1CBD30-F977-468E-B322-4ECAE47A9515}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -15,6 +19,12 @@ Global
 		{92E50B91-2FA3-48A0-B7F7-E04D7790E15B}.Debug|x64.Build.0 = Debug|x64
 		{92E50B91-2FA3-48A0-B7F7-E04D7790E15B}.Release|x64.ActiveCfg = Release|x64
 		{92E50B91-2FA3-48A0-B7F7-E04D7790E15B}.Release|x64.Build.0 = Release|x64
+		{D2E9DCA8-E7E5-41C1-AF83-33A3ACBB18B3}.Debug|x64.ActiveCfg = Debug
+		{D2E9DCA8-E7E5-41C1-AF83-33A3ACBB18B3}.Release|x64.ActiveCfg = Release
+		{D2E9DCA8-E7E5-41C1-AF83-33A3ACBB18B3}.Release|x64.Build.0 = Release
+		{8B1CBD30-F977-468E-B322-4ECAE47A9515}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8B1CBD30-F977-468E-B322-4ECAE47A9515}.Release|x64.ActiveCfg = Release|Any CPU
+		{8B1CBD30-F977-468E-B322-4ECAE47A9515}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
