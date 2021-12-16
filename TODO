@@ -1,5 +1,7 @@
 Performance work:
 
+* Update to NIS SDK 1.0.1
+* Retrieve the GPU name to configure the NISOptimizer accordingly
 * Optimize the vertex shader to only draw one triangle and use clipping
 * Add a switch to toggle half-precision floats
 
@@ -9,8 +11,6 @@ Feature work:
 * Add brightness/contrast/saturation to the shader
 * Integrate CptLucky8 exposure change
 * Investigate (again) the FOV modifier idea (discussed on MSFS forum)
-* Implement preset hotkeys(?)
-* Implement an overlay UI(?)
 * Implement native support for Direct3D 12(?)
 
 Compliance work (does not affect MSFS2020 as of Dec'21):
