@@ -9,6 +9,8 @@ Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Setup", "Setup\Setup.vdproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SetupCustomActions", "Setup\SetupCustomActions\SetupCustomActions.csproj", "{8B1CBD30-F977-468E-B322-4ECAE47A9515}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConfigUI", "ConfigUI\ConfigUI.csproj", "{69C43742-D646-44B8-A869-3D8016D525CE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -25,6 +27,10 @@ Global
 		{8B1CBD30-F977-468E-B322-4ECAE47A9515}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{8B1CBD30-F977-468E-B322-4ECAE47A9515}.Release|x64.ActiveCfg = Release|Any CPU
 		{8B1CBD30-F977-468E-B322-4ECAE47A9515}.Release|x64.Build.0 = Release|Any CPU
+		{69C43742-D646-44B8-A869-3D8016D525CE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{69C43742-D646-44B8-A869-3D8016D525CE}.Debug|x64.Build.0 = Debug|Any CPU
+		{69C43742-D646-44B8-A869-3D8016D525CE}.Release|x64.ActiveCfg = Release|Any CPU
+		{69C43742-D646-44B8-A869-3D8016D525CE}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

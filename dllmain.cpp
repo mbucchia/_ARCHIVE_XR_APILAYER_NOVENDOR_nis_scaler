@@ -27,6 +27,9 @@
 namespace {
     using Microsoft::WRL::ComPtr;
 
+    // Update in Form1.cs if needed.
+    const std::string RegPrefix = "SOFTWARE\\OpenXR_NIS_Scaler";
+
     const std::string LayerName = "XR_APILAYER_NOVENDOR_nis_scaler";
     const std::string VersionString = "Alpha4";
 
@@ -256,73 +259,88 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 #endif
     }
 
+    // https://docs.microsoft.com/en-us/archive/msdn-magazine/2017/may/c-use-modern-c-to-access-the-windows-registry
+    int RegGetDword(
+        HKEY hKey,
+        const std::wstring& subKey,
+        const std::wstring& value,
+        DWORD defaultValue)
+    {
+        DWORD data{};
+        DWORD dataSize = sizeof(data);
+        LONG retCode = ::RegGetValue(
+            hKey,
+            subKey.c_str(),
+            value.c_str(),
+            RRF_RT_REG_DWORD,
+            nullptr,
+            &data,
+            &dataSize);
+        if (retCode != ERROR_SUCCESS)
+        {
+            return defaultValue;
+        }
+        return data;
+    }
+
     // Load configuration for our layer.
     bool LoadConfiguration(
         const std::string configName)
     {
+        config.Reset();
+
         if (configName.empty())
         {
             return false;
         }
 
-        std::ifstream configFile(std::filesystem::path(dllHome) / std::filesystem::path(configName + ".cfg"));
-        if (configFile.is_open())
+        // Base key for the application.
+        std::string baseKey = RegPrefix + "\\" + configName;
+        std::wstring wbaseKey = std::wstring(baseKey.begin(), baseKey.end());
+        const int isEnabledForApplication = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, L"enabled", -1);
+
+        int isEnabled = isEnabledForApplication == 1;
+        if (isEnabledForApplication == -1)
         {
-            Log("Loading config for \"%s\"\n", configName.c_str());
+            // Try the global settings.
+            baseKey = RegPrefix;
+            wbaseKey = std::wstring(baseKey.begin(), baseKey.end());
+            isEnabled = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, L"enabled", 0);
+        }
 
-            unsigned int lineNumber = 0;
-            std::string line;
-            while (std::getline(configFile, line))
+        if (isEnabled)
+        {
+            if (isEnabledForApplication == 1)
             {
-                lineNumber++;
-                try
-                {
-                    // TODO: Usability: handle comments, white spaces, blank lines...
-                    const auto offset = line.find('=');
-                    if (offset != std::string::npos)
-                    {
-                        const std::string name = line.substr(0, offset);
-                        const std::string value = line.substr(offset + 1);
-
-                        if (name == "scaling")
-                        {
-                            config.scaleFactor = std::clamp(std::stof(value), 0.f, 1.f);
-                        }
-                        else if (name == "sharpness")
-                        {
-                            config.sharpness = std::clamp(std::stof(value), 0.f, 1.f);
-                        }
-                        else if (name == "disable_bilinear_scaler")
-                        {
-                            config.disableBilinearScaler = value == "1" || value == "true";
-                        }
-                        else if (name == "intermediate_format")
-                        {
-                            config.intermediateFormat = (DXGI_FORMAT)std::stoi(value);
-                        }
-                        else if (name == "fast_context_switch")
-                        {
-                            config.fastContextSwitch = value == "1" || value == "true";
-                        }
-                        else if (name == "enable_stats")
-                        {
-                            config.enableStats = value == "1" || value == "true";
-                        }
-                    }
-                }
-                catch (...)
-                {
-                    Log("Error parsing L%u\n", lineNumber);
-                }
+                Log("Loading config for \"%s\"\n", configName.c_str());
             }
-            configFile.close();
+            else
+            {
+                Log("Using global settings\n");
+            }
+
+#define LOAD_DWORD_SETTING(setting, key, transform)                                 \
+            do {                                                                    \
+                int _value = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, (key), -1);  \
+                if (_value != -1)                                                   \
+                {                                                                   \
+                    (setting) = transform(_value);                                  \
+                }                                                                   \
+            } while (false)
+
+            LOAD_DWORD_SETTING(config.scaleFactor, L"scaling", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
+            LOAD_DWORD_SETTING(config.sharpness, L"sharpness", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
+            LOAD_DWORD_SETTING(config.disableBilinearScaler, L"disable_bilinear_scaler", [](int value) { return value != 0; });
+            LOAD_DWORD_SETTING(config.intermediateFormat, L"intermediate_format", [](int value) { return (DXGI_FORMAT)value; });
+            LOAD_DWORD_SETTING(config.fastContextSwitch, L"fast_context_switch", [](int value) { return value != 0; });
+            LOAD_DWORD_SETTING(config.enableStats, L"enable_stats", [](int value) { return value != 0; });
 
             config.loaded = true;
 
             return true;
         }
 
-        Log("Could not load config for \"%s\"\n", configName.c_str());
+        Log("Did not find settings for \"%s\"\n", configName.c_str());
 
         return false;
     }
@@ -1213,12 +1231,8 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
 
             next_xrGetInstanceProcAddr(*instance, "xrEnumerateSwapchainFormats", reinterpret_cast<PFN_xrVoidFunction*>(&next_xrEnumerateSwapchainFormats));
 
-            config.Reset();
-
-            // Identify the application and load our configuration. Try by application first, then fallback to engines otherwise.
-            if (!LoadConfiguration(instanceCreateInfo->applicationInfo.applicationName)) {
-                LoadConfiguration(instanceCreateInfo->applicationInfo.engineName);
-            }
+            // Identify the application and load our configuration.
+            LoadConfiguration(instanceCreateInfo->applicationInfo.applicationName);
             config.Dump();
         }
 

@@ -18,50 +18,29 @@ This software may be used with any modern GPU, and is not limited to NVIDIA hard
 
 Please visit the release page to download the installer for the latest version: https://github.com/mbucchia/XR_APILAYER_NOVENDOR_nis_scaler/releases.
 
-(For Windows Mixed Reality users) You may confirm that the software is properly installed/uninstalled by using the OpenXR Developer Tools for Windows Mixed Reality, check under the *System Status* tab, scroll down to *API Layers*. A layer named `XR_APILAYER_NOVENDOR_nis_scaler` is listed when the software is installed.
-
-## Configuration file
-
-NOTE TO MICROSOFT FLIGHT SIMULATOR 2020 USERS: The installer already provides a base configuration file (`FS2020.cfg`) for Flight Simulator 2020!
-
-The configuration file contains two values:
-
-* `scaling` (between 0 and 1), indicating the amount of upscaling to request;
-* `sharpness` (between 0 and 1), indicating the the amount of sharpness filtering to apply.
-
-The NIS scaling processing occurs after the in-game render scale scaling (if any) and before the OpenXR custom render scale scaling.
-
-Example configuration file with a scaling factor of 65% and sharpness of 40%:
-
-```
-scaling=0.65
-sharpness=0.4
-```
+Once installed, use the _OpenXR NIS Scaler configuration tool_ to confirm that the software is active and to configure it.
 
 ## Best practices
 
-(_This section is still under construction_)
+_This section is still under construction_
 
-## Creating the configuration file
+## Determine the OpenXR application name
 
-In order to enable the software for a given application (eg: Microsoft Flight Simulator 2020 aka MSFS2020), a configuration file must be present for this application.
+Each application registers itself with a name. This name is set by the application developer and is likely different from the "well-known" name of the application.
 
-1. Each application registers itself with a name. The first step is to retrieve the name that the application passes to OpenXR. In order to do that, follow the setup instructions above to install the software, then run the application you wish to enable NIS scaling for. In this example, we start MSFS2020.
+1. Tun the application you wish to enable NIS scaling for. In this example, we start Microsoft Flight Simulator 2020.
 
 2. Locate the log file for the software. It will typically be stored at `%LocalAppData%\XR_APILAYER_NOVENDOR_nis_scaler.log`.
 
-3. In the log file, search for the first line reading "Could not load config for ...". The name specified on this line is the application name:
+3. In the log file, search for the first line reading "Did not find settings for ...". The name specified on this line is the application name:
 
 ```
 dllHome is "C:\Program Files\OpenXR-API-Layers"
 XR_APILAYER_NOVENDOR_nis_scaler layer is active
-Could not load config for "FS2020"
-Could not load config for "Zouna"
+Did not find settings for "FS2020"
 ```
 
-4. In the same folder where `XR_APILAYER_NOVENDOR_nis_scaler.json` was copied during setup, create a file with a name matching the application name and with the extension `.cfg`. For our example `C:\Program Files\OpenXR-API-Layers\FS2020.cfg`.
-
-5. Update the file with the designed settings.
+4. In the _OpenXR NIS Scaler configuration tool_, you may now add the application by specifying the name found in step 3).
 
 ## Keyboard shortcuts
 

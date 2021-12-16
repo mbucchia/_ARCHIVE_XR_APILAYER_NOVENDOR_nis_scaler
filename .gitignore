@@ -1,4 +1,7 @@
 .vs/*
 packages/*
 x64/*
+**/bin/*
+**/obj/*
 *.vcxproj.user
+*.csproj.user
