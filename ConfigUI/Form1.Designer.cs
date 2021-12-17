@@ -55,7 +55,7 @@ namespace ConfigUI
             this.applicationList.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.applicationList.FormattingEnabled = true;
             this.applicationList.Items.AddRange(new object[] {
-            "All applications",
+            "All other applications",
             "Add a new application..."});
             this.applicationList.Location = new System.Drawing.Point(38, 106);
             this.applicationList.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
