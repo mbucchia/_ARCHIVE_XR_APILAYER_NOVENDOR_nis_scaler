@@ -39,28 +39,5 @@ namespace SetupCustomActions
 
             base.OnAfterInstall(savedState);
         }
-
-        [System.Security.Permissions.SecurityPermission(System.Security.Permissions.SecurityAction.Demand)]
-        protected override void OnAfterUninstall(IDictionary savedState)
-        {
-            try
-            {
-                var installPath = Path.GetDirectoryName(Path.GetDirectoryName(base.Context.Parameters["AssemblyPath"]));
-                var jsonPath = installPath + "\\XR_APILAYER_NOVENDOR_nis_scaler.json";
-
-                // Delete our key.
-                Microsoft.Win32.RegistryKey key;
-                key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey("SOFTWARE\\Khronos\\OpenXR\\1\\ApiLayers\\Implicit");
-                key.DeleteValue(jsonPath);
-                key.Close();
-            }
-            catch (Exception e)
-            {
-            }
-            finally
-            {
-                base.OnAfterUninstall(savedState);
-            }
-        }
     }
 }
