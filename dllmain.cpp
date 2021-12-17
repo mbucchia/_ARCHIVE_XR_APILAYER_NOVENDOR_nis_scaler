@@ -31,7 +31,7 @@ namespace {
     const std::string RegPrefix = "SOFTWARE\\OpenXR_NIS_Scaler";
 
     const std::string LayerName = "XR_APILAYER_NOVENDOR_nis_scaler";
-    const std::string VersionString = "Alpha4";
+    const std::string VersionString = "Beta-1";
 
     const std::string colorConversionShadersSource = R"_(
 Texture2D srcTex;
