@@ -158,7 +158,7 @@ void DeviceResources::clearRenderTargetView(const float color[4])
     abort();
 }
 
-void DeviceResources::getTextureData(ID3D11Texture2D* texture, uint8_t* data)
+void DeviceResources::getTextureData(ID3D11Texture2D* texture, std::vector<uint8_t>& data, uint32_t& width, uint32_t& height, uint32_t& rowPitch)
 {
     abort();
 }

@@ -33,17 +33,14 @@ namespace {
     const std::string LayerName = "XR_APILAYER_NOVENDOR_nis_scaler";
     const std::string VersionString = "Alpha4";
 
-    // TODO: Optimize the VS to only draw 1 triangle and use clipping.
     const std::string colorConversionShadersSource = R"_(
 Texture2D srcTex;
 SamplerState srcSampler;
 
 void vsMain(in uint id : SV_VertexID, out float4 position : SV_Position, out float2 texcoord : TEXCOORD0)
 {
-    texcoord.x = (id == 2) ?  2.0 :  0.0;
-    texcoord.y = (id == 1) ?  2.0 :  0.0;
-
-    position = float4(texcoord * float2(2.0, -2.0) + float2(-1.0, 1.0), 1.0, 1.0);
+    texcoord = float2((id == 1) ? 2.0 : 0.0, (id == 2) ? 2.0 : 0.0);
+    position = float4(texcoord * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
 }
 
 float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) : SV_TARGET {
@@ -308,41 +305,42 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             isEnabled = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, L"enabled", 0);
         }
 
-        if (isEnabled)
+        if (!isEnabled)
         {
-            if (isEnabledForApplication == 1)
-            {
-                Log("Loading config for \"%s\"\n", configName.c_str());
-            }
-            else
-            {
-                Log("Using global settings\n");
-            }
+            // We always want to display this message so the log will contain the OpenXR application name.
+            Log("Did not find settings for \"%s\"\n", configName.c_str());
 
-#define LOAD_DWORD_SETTING(setting, key, transform)                                 \
-            do {                                                                    \
-                int _value = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, (key), -1);  \
-                if (_value != -1)                                                   \
-                {                                                                   \
-                    (setting) = transform(_value);                                  \
-                }                                                                   \
-            } while (false)
-
-            LOAD_DWORD_SETTING(config.scaleFactor, L"scaling", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
-            LOAD_DWORD_SETTING(config.sharpness, L"sharpness", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
-            LOAD_DWORD_SETTING(config.disableBilinearScaler, L"disable_bilinear_scaler", [](int value) { return value != 0; });
-            LOAD_DWORD_SETTING(config.intermediateFormat, L"intermediate_format", [](int value) { return (DXGI_FORMAT)value; });
-            LOAD_DWORD_SETTING(config.fastContextSwitch, L"fast_context_switch", [](int value) { return value != 0; });
-            LOAD_DWORD_SETTING(config.enableStats, L"enable_stats", [](int value) { return value != 0; });
-
-            config.loaded = true;
-
-            return true;
+            return false;
         }
 
-        Log("Did not find settings for \"%s\"\n", configName.c_str());
+        if (isEnabledForApplication == 1)
+        {
+            Log("Loading config for \"%s\"\n", configName.c_str());
+        }
+        else
+        {
+            Log("Using global settings\n");
+        }
 
-        return false;
+#define LOAD_DWORD_SETTING(setting, key, transform)                                 \
+        do {                                                                    \
+            int _value = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, (key), -1);  \
+            if (_value != -1)                                                   \
+            {                                                                   \
+                (setting) = transform(_value);                                  \
+            }                                                                   \
+        } while (false)
+
+        LOAD_DWORD_SETTING(config.scaleFactor, L"scaling", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
+        LOAD_DWORD_SETTING(config.sharpness, L"sharpness", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
+        LOAD_DWORD_SETTING(config.disableBilinearScaler, L"disable_bilinear_scaler", [](int value) { return value != 0; });
+        LOAD_DWORD_SETTING(config.intermediateFormat, L"intermediate_format", [](int value) { return (DXGI_FORMAT)value; });
+        LOAD_DWORD_SETTING(config.fastContextSwitch, L"fast_context_switch", [](int value) { return value != 0; });
+        LOAD_DWORD_SETTING(config.enableStats, L"enable_stats", [](int value) { return value != 0; });
+
+        config.loaded = true;
+
+        return true;
     }
 
     // Implement keyboard shortcut detection and handling.
@@ -530,6 +528,21 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         // Keep track of the D3D device.
                         const XrGraphicsBindingD3D11KHR* d3dBindings = reinterpret_cast<const XrGraphicsBindingD3D11KHR*>(entry);
                         d3d11Device = d3dBindings->device;
+
+                        // Try to log the GPU name.
+                        {
+                            ComPtr<IDXGIDevice> dxgiDevice;
+                            ComPtr<IDXGIAdapter> adapter;
+                            DXGI_ADAPTER_DESC desc;
+
+                            if (SUCCEEDED(d3d11Device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(dxgiDevice.GetAddressOf()))) &&
+                                SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) &&
+                                SUCCEEDED(adapter->GetDesc(&desc)))
+                            {
+                                const std::wstring adapterDescription(desc.Description);
+                                Log("Using adapter: %s\n", std::string(adapterDescription.begin(), adapterDescription.end()).c_str());
+                            }
+                        }
 
                         // HACK: See our DeviceResources implementation. We use the existing interface using an HWND pointer as an opaque pointer.
                         deviceResources.create(reinterpret_cast<HWND>(d3d11Device.Get()));
@@ -725,14 +738,16 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         resources.bilinearScaler = std::make_shared<BilinearUpscale>(deviceResources);
                         resources.bilinearScaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
+                    std::vector<std::string> shaderHome;
+                    shaderHome.push_back(nisShaderHome);
                     if (config.scaleFactor < 1.f)
                     {
-                        resources.NISScaler = std::make_shared<NVScaler>(deviceResources, nisShaderHome);
+                        resources.NISScaler = std::make_shared<NVScaler>(deviceResources, shaderHome);
                         resources.NISScaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
                     else
                     {
-                        resources.NISSharpen = std::make_shared<NVSharpen>(deviceResources, nisShaderHome);
+                        resources.NISSharpen = std::make_shared<NVSharpen>(deviceResources, shaderHome);
                         resources.NISSharpen->update(config.sharpness, createInfo->width, createInfo->height);
                     }
 
@@ -852,6 +867,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     }
 
                     // Create the views needed by the scalers and color conversion.
+                    // TODO: Update the shaders to support VPRT.
                     for (uint32_t j = 0; j < imageInfo.arraySize; j++)
                     {
                         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
@@ -1094,7 +1110,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         executionContext->RSSetViewports(1, &viewport);
                         executionContext->RSSetState(imageInfo.sampleCount > 1 ? colorConversionRasterizerMSAA.Get() : colorConversionRasterizer.Get());
 
-                        executionContext->Draw(4, 0);
+                        executionContext->Draw(3, 0);
 
                         if (!config.fastContextSwitch)
                         {
