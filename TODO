@@ -4,6 +4,7 @@ Performance work:
 * Retrieve the GPU name to configure the NISOptimizer accordingly
 * Optimize the vertex shader to only draw one triangle and use clipping
 * Add a switch to toggle half-precision floats
+* Implement fixed foveated scaling
 
 Feature work:
 
