@@ -28,6 +28,34 @@ namespace ConfigUI
             applicationList.Items.Insert(applicationList.Items.Count - 1, "FS2020 -- Microsoft Flight Simulator 2020");
             protectedApplications = applicationList.Items.Count - 2;
 
+            // Load any user-added application.
+            try
+            {
+                Microsoft.Win32.RegistryKey reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix);
+                var applications = reg.GetSubKeyNames();
+                foreach (var application in applications)
+                {
+                    // Make sure we don't re-add a preset application.
+                    bool skip = false;
+                    foreach (string existingApplication in applicationList.Items)
+                    {
+                        if (existingApplication.Split(new string[] { " -- " }, 2, StringSplitOptions.None)[0] == application)
+                        {
+                            skip = true;
+                            break;
+                        }
+                    }
+
+                    if (!skip)
+                    {
+                        applicationList.Items.Insert(applicationList.Items.Count - 1, application);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+
             try
             {
                 xr = XR.GetApi();
