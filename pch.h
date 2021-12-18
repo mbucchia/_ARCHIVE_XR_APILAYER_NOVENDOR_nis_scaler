@@ -9,7 +9,9 @@
 
 // Standard library.
 #include <cstdarg>
+#include <ctime>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <fstream>
 #include <sstream>

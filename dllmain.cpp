@@ -222,8 +222,11 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         const char* fmt,
         va_list va)
     {
+        const std::time_t now = std::time(nullptr);
+
         char buf[1024];
-        _vsnprintf_s(buf, sizeof(buf), fmt, va);
+        size_t offset = std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S %z: ", std::localtime(&now));
+        _vsnprintf_s(buf + offset, sizeof(buf) - offset, sizeof(buf) - offset, fmt, va);
         OutputDebugStringA(buf);
         if (logStream.is_open())
         {
@@ -539,8 +542,10 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                                 SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) &&
                                 SUCCEEDED(adapter->GetDesc(&desc)))
                             {
-                                const std::wstring adapterDescription(desc.Description);
-                                Log("Using adapter: %s\n", std::string(adapterDescription.begin(), adapterDescription.end()).c_str());
+                                const std::wstring wadapterDescription(desc.Description);
+                                std::string adapterDescription;
+                                std::transform(wadapterDescription.begin(), wadapterDescription.end(), std::back_inserter(adapterDescription), [](wchar_t c) { return (char)c; });
+                                Log("Using adapter: %s\n", adapterDescription.c_str());
                             }
                         }
 

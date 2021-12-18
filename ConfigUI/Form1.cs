@@ -70,11 +70,7 @@ namespace ConfigUI
 
             // Initial state.
             applicationList.SelectedIndex = 0; // All
-            scalingSlider.Value = DefaultScaling;
-            sharpnessSlider.Value = DefaultSharpness;
-            enableNIS_CheckedChanged(null, null);
-            scalingSlider_Scroll(null, null);
-            sharpnessSlider_Scroll(null, null);
+            applicationList_SelectedIndexChanged(null, null);
         }
 
         private XR xr = null;
@@ -83,6 +79,7 @@ namespace ConfigUI
 
         private int protectedApplications = 0;
         private string applicationKey = null;
+        private bool loading = false;
 
         private unsafe void InitXr()
         {
@@ -161,23 +158,29 @@ namespace ConfigUI
                         type: StructureType.TypeSystemGetInfo,
                         formFactor: FormFactor.HeadMountedDisplay
                     );
-                    xr.GetSystem(instance, getInfo, ref systemId);
 
-                    uint viewCount = 0;
-                    xr.EnumerateViewConfigurationView(instance, systemId, ViewConfigurationType.PrimaryStereo, ref viewCount, null);
-                    var views = new ViewConfigurationView[viewCount];
-                    for (int i = 0; i < views.Length; i++)
+                    if (xr.GetSystem(instance, getInfo, ref systemId) == Result.Success)
                     {
-                        views[i].Type = StructureType.TypeViewConfigurationView;
+                        uint viewCount = 0;
+                        xr.EnumerateViewConfigurationView(instance, systemId, ViewConfigurationType.PrimaryStereo, ref viewCount, null);
+                        var views = new ViewConfigurationView[viewCount];
+                        for (int i = 0; i < views.Length; i++)
+                        {
+                            views[i].Type = StructureType.TypeViewConfigurationView;
+                        }
+                        var viewsSpan = new Span<ViewConfigurationView>(views);
+                        if (xr.EnumerateViewConfigurationView(instance, systemId, ViewConfigurationType.PrimaryStereo, ref viewCount, views) == Result.Success)
+                        {
+                            resolutionWidth = views[0].RecommendedImageRectWidth;
+                            resolutionHeight = views[0].RecommendedImageRectHeight;
+
+                            resolutionLabel.Text = "OpenXR resolution: " + resolutionWidth + " x " + resolutionHeight;
+                            scalingSlider_Scroll(null, null);
+                        }
                     }
-                    var viewsSpan = new Span<ViewConfigurationView>(views);
-                    if (xr.EnumerateViewConfigurationView(instance, systemId, ViewConfigurationType.PrimaryStereo, ref viewCount, views) == Result.Success)
+                    else
                     {
-                        resolutionWidth = views[0].RecommendedImageRectWidth;
-                        resolutionHeight = views[0].RecommendedImageRectHeight;
-
-                        resolutionLabel.Text = "OpenXR resolution: " + resolutionWidth + " x " + resolutionHeight;
-                        scalingSlider_Scroll(null, null);
+                        resolutionLabel.Text = "OpenXR resolution: Please turn on headset";
                     }
                 }
                 finally
@@ -193,6 +196,7 @@ namespace ConfigUI
             try
             {
                 reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix + (key == null ? "" : "\\" + key));
+                loading = true;
                 enableNIS.Checked = (int)reg.GetValue("enabled", 0) == 1 ? true : false;
                 scalingSlider.Value = (int)reg.GetValue("scaling", DefaultScaling);
                 sharpnessSlider.Value = (int)reg.GetValue("sharpness", DefaultSharpness);
@@ -203,6 +207,7 @@ namespace ConfigUI
             }
             finally
             {
+                loading = false;
                 if (reg != null)
                 {
                     reg.Close();
@@ -212,6 +217,10 @@ namespace ConfigUI
 
         private void SaveSettings(string key)
         {
+            if (loading)
+            {
+                return;
+            }
             Microsoft.Win32.RegistryKey reg = null;
             try
             {
@@ -320,7 +329,11 @@ namespace ConfigUI
 
             var scaledWidth = (resolutionWidth * scalingSlider.Value) / 100;
             var scaledHeight = (resolutionHeight * scalingSlider.Value) / 100;
-            scalingLabel.Text = scalingSlider.Value + "%" + "\n" + scaledWidth + " x " + scaledHeight;
+            scalingLabel.Text = scalingSlider.Value + "%";
+            if (resolutionWidth != 0)
+            {
+                scalingLabel.Text += "\n" + scaledWidth + " x " + scaledHeight;
+            }
         }
 
         private void sharpnessSlider_Scroll(object sender, EventArgs e)
