@@ -39,22 +39,5 @@ namespace SetupCustomActions
 
             base.OnAfterInstall(savedState);
         }
-
-        protected override void OnCommitted(IDictionary savedState)
-        {
-            // TODO: Somehow the tool cannot talk to OpenXR when run from the installer :(
-#if false
-            // Start the configuration tool upon successful install.
-            var installPath = Path.GetDirectoryName(Path.GetDirectoryName(base.Context.Parameters["AssemblyPath"]));
-            try
-            {
-                System.Diagnostics.Process.Start(installPath + "\\ConfigUI\\ConfigUI.exe");
-            }
-            catch (Win32Exception)
-            {
-            }
-#endif
-            base.OnCommitted(savedState);
-        }
     }
 }

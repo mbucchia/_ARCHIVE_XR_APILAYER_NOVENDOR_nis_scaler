@@ -84,7 +84,7 @@ namespace ConfigUI
             this.enableNIS.Location = new System.Drawing.Point(38, 180);
             this.enableNIS.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
             this.enableNIS.Name = "enableNIS";
-            this.enableNIS.Size = new System.Drawing.Size(125, 21);
+            this.enableNIS.Size = new System.Drawing.Size(172, 24);
             this.enableNIS.TabIndex = 2;
             this.enableNIS.Text = "Enable NIS Scaling";
             this.enableNIS.UseVisualStyleBackColor = true;
@@ -96,7 +96,7 @@ namespace ConfigUI
             this.scalingLabel.Location = new System.Drawing.Point(430, 240);
             this.scalingLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.scalingLabel.Name = "scalingLabel";
-            this.scalingLabel.Size = new System.Drawing.Size(35, 13);
+            this.scalingLabel.Size = new System.Drawing.Size(51, 20);
             this.scalingLabel.TabIndex = 3;
             this.scalingLabel.Text = "label1";
             // 
@@ -119,7 +119,7 @@ namespace ConfigUI
             this.label2.Location = new System.Drawing.Point(75, 328);
             this.label2.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(57, 13);
+            this.label2.Size = new System.Drawing.Size(86, 20);
             this.label2.TabIndex = 5;
             this.label2.Text = "Sharpness";
             // 
@@ -129,7 +129,7 @@ namespace ConfigUI
             this.label3.Location = new System.Drawing.Point(33, 75);
             this.label3.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(94, 13);
+            this.label3.Size = new System.Drawing.Size(138, 20);
             this.label3.TabIndex = 6;
             this.label3.Text = "Select application:";
             // 
@@ -151,7 +151,7 @@ namespace ConfigUI
             this.sharpnessLabel.Location = new System.Drawing.Point(430, 378);
             this.sharpnessLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.sharpnessLabel.Name = "sharpnessLabel";
-            this.sharpnessLabel.Size = new System.Drawing.Size(35, 13);
+            this.sharpnessLabel.Size = new System.Drawing.Size(51, 20);
             this.sharpnessLabel.TabIndex = 8;
             this.sharpnessLabel.Text = "label1";
             // 
@@ -161,16 +161,16 @@ namespace ConfigUI
             this.resolutionLabel.Location = new System.Drawing.Point(33, 28);
             this.resolutionLabel.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.resolutionLabel.Name = "resolutionLabel";
-            this.resolutionLabel.Size = new System.Drawing.Size(102, 13);
+            this.resolutionLabel.Size = new System.Drawing.Size(152, 20);
             this.resolutionLabel.TabIndex = 9;
             this.resolutionLabel.Text = "OpenXR resolution: ";
             // 
             // layerActive
             // 
             this.layerActive.AutoSize = true;
-            this.layerActive.Location = new System.Drawing.Point(357, 28);
+            this.layerActive.Location = new System.Drawing.Point(376, 28);
             this.layerActive.Name = "layerActive";
-            this.layerActive.Size = new System.Drawing.Size(122, 13);
+            this.layerActive.Size = new System.Drawing.Size(180, 20);
             this.layerActive.TabIndex = 10;
             this.layerActive.Text = "Layer state is not known";
             // 
@@ -194,7 +194,7 @@ namespace ConfigUI
             this.reportIssuesLink.AutoSize = true;
             this.reportIssuesLink.Location = new System.Drawing.Point(12, 589);
             this.reportIssuesLink.Name = "reportIssuesLink";
-            this.reportIssuesLink.Size = new System.Drawing.Size(71, 13);
+            this.reportIssuesLink.Size = new System.Drawing.Size(107, 20);
             this.reportIssuesLink.TabIndex = 12;
             this.reportIssuesLink.TabStop = true;
             this.reportIssuesLink.Text = "Report issues";
