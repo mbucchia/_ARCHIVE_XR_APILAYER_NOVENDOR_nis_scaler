@@ -117,6 +117,7 @@ namespace ConfigUI
                     layerActive.ForeColor = Color.Red;
                     applicationList.Enabled = false;
                     enableNIS.Enabled = false;
+                    enableScreenshot.Enabled = false;
                 }
                 else
                 {
@@ -124,6 +125,7 @@ namespace ConfigUI
                     layerActive.ForeColor = Color.Green;
                     applicationList.Enabled = true;
                     enableNIS.Enabled = true;
+                    enableScreenshot.Enabled = true;
                 }
                 enableNIS_CheckedChanged(null, null);
             }
@@ -195,11 +197,18 @@ namespace ConfigUI
             Microsoft.Win32.RegistryKey reg = null;
             try
             {
-                reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix + (key == null ? "" : "\\" + key));
                 loading = true;
-                enableNIS.Checked = (int)reg.GetValue("enabled", 0) == 1 ? true : false;
-                scalingSlider.Value = (int)reg.GetValue("scaling", DefaultScaling);
-                sharpnessSlider.Value = (int)reg.GetValue("sharpness", DefaultSharpness);
+                {
+                    reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix + (key == null ? "" : "\\" + key));
+                    enableNIS.Checked = (int)reg.GetValue("enabled", 0) == 1 ? true : false;
+                    scalingSlider.Value = (int)reg.GetValue("scaling", DefaultScaling);
+                    sharpnessSlider.Value = (int)reg.GetValue("sharpness", DefaultSharpness);
+                    reg.Close();
+                }
+                {
+                    reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix);
+                    enableScreenshot.Checked = (int)reg.GetValue("enable_screenshots", 0) == 1 ? true : false;
+                }
             }
             catch (Exception exc)
             {
@@ -224,10 +233,17 @@ namespace ConfigUI
             Microsoft.Win32.RegistryKey reg = null;
             try
             {
-                reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix + (key == null ? "" : "\\" + key));
-                reg.SetValue("enabled", enableNIS.Checked ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
-                reg.SetValue("scaling", scalingSlider.Value, Microsoft.Win32.RegistryValueKind.DWord);
-                reg.SetValue("sharpness", sharpnessSlider.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                {
+                    reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix + (key == null ? "" : "\\" + key));
+                    reg.SetValue("enabled", enableNIS.Checked ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                    reg.SetValue("scaling", scalingSlider.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    reg.SetValue("sharpness", sharpnessSlider.Value, Microsoft.Win32.RegistryValueKind.DWord);
+                    reg.Close();
+                }
+                {
+                    reg = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(RegPrefix);
+                    reg.SetValue("enable_screenshots", enableScreenshot.Checked ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                }
             }
             catch (Exception exc)
             {
@@ -354,6 +370,14 @@ namespace ConfigUI
 
             applicationList.SelectedIndex = 0;
             applicationList_SelectedIndexChanged(null, null);
+        }
+
+        private void enableScreenshot_CheckedChanged(object sender, EventArgs e)
+        {
+            if (sender != null)
+            {
+                SaveSettings(applicationKey);
+            }
         }
 
         private void refreshTimer_Tick(object sender, EventArgs e)

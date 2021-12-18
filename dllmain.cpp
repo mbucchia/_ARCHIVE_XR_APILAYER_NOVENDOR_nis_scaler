@@ -159,17 +159,20 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         EnumMax
     } scalingMode;
     float newSharpness;
+    bool takeScreenshot = false;
 
     void Log(const char* fmt, ...);
 
     struct {
         bool loaded;
+        std::string name;
         float scaleFactor;
         float sharpness;
         bool disableBilinearScaler;
         DXGI_FORMAT intermediateFormat;
         bool fastContextSwitch;
         bool enableStats;
+        bool enableScreenshots;
 
         void Dump()
         {
@@ -208,12 +211,14 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         void Reset()
         {
             loaded = false;
+            name = "";
             scaleFactor = 0.7f;
             sharpness = 0.5f;
             disableBilinearScaler = true;
             intermediateFormat = DXGI_FORMAT_R16G16B16A16_UNORM;
             fastContextSwitch = true;
             enableStats = false;
+            enableScreenshots = false;
         }
     } config;
 
@@ -294,6 +299,9 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             return false;
         }
 
+        // Global settings.
+        const std::wstring wglobalKey = std::wstring(RegPrefix.begin(), RegPrefix.end());
+
         // Base key for the application.
         std::string baseKey = RegPrefix + "\\" + configName;
         std::wstring wbaseKey = std::wstring(baseKey.begin(), baseKey.end());
@@ -303,9 +311,9 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
         if (isEnabledForApplication == -1)
         {
             // Try the global settings.
+            isEnabled = RegGetDword(HKEY_LOCAL_MACHINE, wglobalKey, L"enabled", 0);
             baseKey = RegPrefix;
-            wbaseKey = std::wstring(baseKey.begin(), baseKey.end());
-            isEnabled = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, L"enabled", 0);
+            wbaseKey = wglobalKey;
         }
 
         if (!isEnabled)
@@ -325,22 +333,25 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             Log("Using global settings\n");
         }
 
-#define LOAD_DWORD_SETTING(setting, key, transform)                                 \
-        do {                                                                    \
-            int _value = RegGetDword(HKEY_LOCAL_MACHINE, wbaseKey, (key), -1);  \
-            if (_value != -1)                                                   \
-            {                                                                   \
-                (setting) = transform(_value);                                  \
-            }                                                                   \
+#define LOAD_DWORD_SETTING(setting, base, key, transform)                   \
+        do {                                                                \
+            int _value = RegGetDword(HKEY_LOCAL_MACHINE, base, (key), -1);  \
+            if (_value != -1)                                               \
+            {                                                               \
+                (setting) = transform(_value);                              \
+            }                                                               \
         } while (false)
 
-        LOAD_DWORD_SETTING(config.scaleFactor, L"scaling", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
-        LOAD_DWORD_SETTING(config.sharpness, L"sharpness", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
-        LOAD_DWORD_SETTING(config.disableBilinearScaler, L"disable_bilinear_scaler", [](int value) { return value != 0; });
-        LOAD_DWORD_SETTING(config.intermediateFormat, L"intermediate_format", [](int value) { return (DXGI_FORMAT)value; });
-        LOAD_DWORD_SETTING(config.fastContextSwitch, L"fast_context_switch", [](int value) { return value != 0; });
-        LOAD_DWORD_SETTING(config.enableStats, L"enable_stats", [](int value) { return value != 0; });
+        LOAD_DWORD_SETTING(config.scaleFactor, wbaseKey, L"scaling", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
+        LOAD_DWORD_SETTING(config.sharpness, wbaseKey, L"sharpness", [](int value) { return std::clamp(value, 0, 100) / 100.f; });
+        LOAD_DWORD_SETTING(config.disableBilinearScaler, wbaseKey, L"disable_bilinear_scaler", [](int value) { return value != 0; });
+        LOAD_DWORD_SETTING(config.intermediateFormat, wbaseKey, L"intermediate_format", [](int value) { return (DXGI_FORMAT)value; });
+        LOAD_DWORD_SETTING(config.fastContextSwitch, wbaseKey, L"fast_context_switch", [](int value) { return value != 0; });
+        LOAD_DWORD_SETTING(config.enableStats, wbaseKey, L"enable_stats", [](int value) { return value != 0; });
 
+        LOAD_DWORD_SETTING(config.enableScreenshots, wglobalKey, L"enable_screenshots", [](int value) { return value != 0; });
+
+        config.name = configName;
         config.loaded = true;
 
         return true;
@@ -377,6 +388,14 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
             Log("sharpness=%.3f\n", newSharpness);
         }
         wasF3Pressed = isF3Pressed;
+
+        static bool wasF12Pressed = false;
+        const bool isF12Pressed = GetAsyncKeyState(VK_CONTROL) && GetAsyncKeyState(VK_F12);
+        if (!wasF12Pressed && isF12Pressed)
+        {
+            takeScreenshot = config.enableScreenshots;
+        }
+        wasF12Pressed = isF12Pressed;
     }
 
     // Returns whether a texture format is directly supported by the NIS shader.
@@ -832,7 +851,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                 {
                     SwapchainImageResources resources;
 
-                    // We don't strictly need to keep the runtime texture, but we do it for possible future uses.
+                    // Keep the runtime texture.
                     resources.runtimeTexture = d3dImages[i].texture;
 
                     // Create the texture that the app will render to.
@@ -1136,6 +1155,35 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                     // TODO: This is non-compliant AND dangerous. We cannot bypass the constness here and should make a copy instead.
                     ((XrCompositionLayerProjectionView*)&view)->subImage.imageRect.extent.width = actualDisplayWidth;
                     ((XrCompositionLayerProjectionView*)&view)->subImage.imageRect.extent.height = actualDisplayHeight;
+
+                    // Take a screenshot if requested.
+                    if (takeScreenshot)
+                    {
+                        std::stringstream parameters;
+                        if (scalingMode == ScalingMode::NIS)
+                        {
+                            parameters << "NIS_" << std::fixed << std::setprecision(3) << config.scaleFactor << "_" << config.sharpness;
+                        }
+                        else
+                        {
+                            parameters << "upscaled_" << std::fixed << std::setprecision(3) << config.scaleFactor;
+                        }
+                        const std::time_t now = std::time(nullptr);
+                        char datetime[1024];
+                        std::strftime(datetime, sizeof(datetime), "%Y%m%d_%H%M%S_", std::localtime(&now));
+                        const std::string screenshotFilename = config.name + "_" + datetime + parameters.str() + ".dds";
+                        std::string screenshotPath = (std::filesystem::path(getenv("LOCALAPPDATA")) / screenshotFilename).string();
+                        const HRESULT hr = D3DX11SaveTextureToFileA(deviceResources.context(), swapchainResources.runtimeTexture, D3DX11_IFF_DDS, screenshotPath.c_str());
+                        if (SUCCEEDED(hr))
+                        {
+                            Log("Screenshot saved to %s\n", screenshotPath.c_str());
+                        }
+                        else
+                        {
+                            Log("Failed to take screenshot: %d\n", hr);
+                        }
+                        takeScreenshot = false;
+                    }
 
                     // Perform upscaling for the depth layer if needed.
                     const XrBaseInStructure* entry = reinterpret_cast<const XrBaseInStructure*>(view.next);

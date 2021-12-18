@@ -28,6 +28,8 @@
 
 // D3D
 #include <d3d11.h>
+#include <D3DX11.h>
+#include <D3DX11tex.h>
 
 // OpenXR + Windows-specific definitions.
 #define XR_USE_PLATFORM_WIN32
