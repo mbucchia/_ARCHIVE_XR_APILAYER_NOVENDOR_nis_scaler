@@ -73,7 +73,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
     // Device state.
     uint32_t actualDisplayWidth;
     uint32_t actualDisplayHeight;
-    ComPtr<ID3D11Device> d3d11Device = nullptr;
+    ID3D11Device* d3d11Device = nullptr;
     DeviceResources deviceResources;
 
     // Scalers state and resources.
@@ -569,7 +569,7 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         }
 
                         // HACK: See our DeviceResources implementation. We use the existing interface using an HWND pointer as an opaque pointer.
-                        deviceResources.create(reinterpret_cast<HWND>(d3d11Device.Get()));
+                        deviceResources.create(reinterpret_cast<HWND>(d3d11Device));
 
                         // Check whether we need color conversion.
                         uint32_t formatsCount = 0;
@@ -928,9 +928,9 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         rtvDesc.Texture2DArray.ArraySize = imageInfo.arraySize;
                         rtvDesc.Texture2DArray.FirstArraySlice = D3D11CalcSubresource(0, j, imageInfo.mipCount);
                         DX::ThrowIfFailed(deviceResources.device()->CreateRenderTargetView(resources.runtimeTexture, &rtvDesc, resources.runtimeTextureRtv[j].GetAddressOf()));
-
-                        commonResources.imageResources.push_back(resources);
                     }
+
+                    commonResources.imageResources.push_back(resources);
 
                     // Let the app use our downscaled texture and keep track of the resources to use during xrEndFrame().
                     d3dImages[i].texture = resources.appTexture.Get();
