@@ -75,8 +75,6 @@
     <None Include="packages.config" />
     <None Include=".gitignore" />
     <None Include="README.md" />
-    <None Include="Install-XR_APILAYER_NOVENDOR_nis_scaler.ps1" />
-    <None Include="Uninstall-XR_APILAYER_NOVENDOR_nis_scaler.ps1" />
     <None Include="XR_APILAYER_NOVENDOR_nis_scaler.json" />
     <None Include="TODO" />
     <None Include="NVIDIAImageScaling\NIS\NIS_Main.hlsl">
