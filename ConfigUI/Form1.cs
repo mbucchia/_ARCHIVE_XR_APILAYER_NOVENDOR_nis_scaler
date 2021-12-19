@@ -65,7 +65,7 @@ namespace ConfigUI
             }
             catch (Exception)
             {
-                MessageBox.Show(this, "Failed to initialize OpenXR", "Error");
+                MessageBox.Show(this, "Failed to initialize OpenXR", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
 
             // Initial state.
@@ -131,7 +131,7 @@ namespace ConfigUI
             }
             else
             {
-                MessageBox.Show(this, "Failed to query API layers", "Error");
+                MessageBox.Show(this, "Failed to query API layers", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
