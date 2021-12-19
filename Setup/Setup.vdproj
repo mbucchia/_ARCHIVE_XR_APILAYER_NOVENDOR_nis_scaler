@@ -653,7 +653,7 @@
             "SharedLegacy" = "11:FALSE"
             "PackageAs" = "3:1"
             "Register" = "3:1"
-            "Exclude" = "11:FALSE"
+            "Exclude" = "11:TRUE"
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
@@ -746,7 +746,7 @@
             "SharedLegacy" = "11:FALSE"
             "PackageAs" = "3:1"
             "Register" = "3:1"
-            "Exclude" = "11:FALSE"
+            "Exclude" = "11:TRUE"
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
@@ -1116,7 +1116,7 @@
             "SharedLegacy" = "11:FALSE"
             "PackageAs" = "3:1"
             "Register" = "3:1"
-            "Exclude" = "11:FALSE"
+            "Exclude" = "11:TRUE"
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
@@ -1167,7 +1167,7 @@
             "SharedLegacy" = "11:FALSE"
             "PackageAs" = "3:1"
             "Register" = "3:1"
-            "Exclude" = "11:FALSE"
+            "Exclude" = "11:TRUE"
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
@@ -1485,7 +1485,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:OpenXR-NIS-Scaler"
         "ProductCode" = "8:{BC86E39D-FF1D-47E9-9F22-3586B0EB733A}"
-        "PackageCode" = "8:{BA6E1648-9700-4A94-B993-EAC6E20E7A39}"
+        "PackageCode" = "8:{E377095A-EEEA-4298-AA9C-C1AA63DDD84B}"
         "UpgradeCode" = "8:{DE3B4392-8473-4208-A77F-812E54E09AE6}"
         "AspNetVersion" = "8:"
         "RestartWWWService" = "11:FALSE"
@@ -2137,7 +2137,7 @@
         {
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_4846DAF54DD240A895F492636EE97BAE"
             {
-            "SourcePath" = "8:..\\ConfigUI\\obj\\Debug\\ConfigUI.exe"
+            "SourcePath" = "8:..\\ConfigUI\\obj\\Release\\ConfigUI.exe"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_60C0EEEB6A2641928AA6D0B68DE7F13C"
@@ -2165,7 +2165,7 @@
             }
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_5B32C3205FBA4808BD5B7F3B1F3E6194"
             {
-            "SourcePath" = "8:..\\x64\\Debug\\XR_APILAYER_NOVENDOR_nis_scaler.dll"
+            "SourcePath" = "8:..\\x64\\Release\\XR_APILAYER_NOVENDOR_nis_scaler.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_5B75DEFBD6F54FBE9D37471984D62D5E"

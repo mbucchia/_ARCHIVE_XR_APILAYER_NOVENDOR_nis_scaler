@@ -24,6 +24,8 @@ namespace ConfigUI
         {
             InitializeComponent();
 
+            tooltip.SetToolTip(enableScreenshot, "Screenshots are stored under %LocalAppData%");
+
             // TODO: Add popular applications here.
             applicationList.Items.Insert(applicationList.Items.Count - 1, "FS2020 -- Microsoft Flight Simulator 2020");
             protectedApplications = applicationList.Items.Count - 2;
@@ -391,6 +393,14 @@ namespace ConfigUI
 
             reportIssuesLink.LinkVisited = true;
             System.Diagnostics.Process.Start(githubIssues);
+        }
+
+        private void checkUpdatesLink_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            string githubReleases = "https://github.com/mbucchia/XR_APILAYER_NOVENDOR_nis_scaler/releases";
+
+            checkUpdatesLink.LinkVisited = true;
+            System.Diagnostics.Process.Start(githubReleases);
         }
 
         // https://stackoverflow.com/questions/97097/what-is-the-c-sharp-version-of-vb-nets-inputdialog

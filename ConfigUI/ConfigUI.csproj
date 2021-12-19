@@ -165,4 +165,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>copy $(ProjectDir)\openxr_loader.dll $(TargetDir)</PostBuildEvent>
+  </PropertyGroup>
 </Project>

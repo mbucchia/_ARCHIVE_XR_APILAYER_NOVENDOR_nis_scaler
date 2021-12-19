@@ -26,6 +26,8 @@ _This section is still under construction_
 
 ## Determine the OpenXR application name
 
+NOTE: Some applications, like Microsoft Flight Simulator 2020, are already available to configure through the _OpenXR NIS Scaler configuration tool_. Following the steps below is not needed for them.
+
 Each application registers itself with a name. This name is set by the application developer and is likely different from the "well-known" name of the application.
 
 1. Tun the application you wish to enable NIS scaling for. In this example, we start Microsoft Flight Simulator 2020.
@@ -69,5 +71,13 @@ Special thanks to BufordTX for submitting a fix for a bug in the installation sc
 Special thanks to CptLucky8 for spotting an issue with the instructions.
 
 Special thanks to HyperJet2018 and CptLucky8 for their input on resolving the sRGB color degrations issue.
+
+Special thanks to the beta testers:
+- BufordTX
+- CptLucky8
+- CptStevil
+- NumberNumber481
+- RPthreenine
+- themadmaker
 
 Many thanks to the https://forums.flightsimulator.com/ community for the testing and feedback!
