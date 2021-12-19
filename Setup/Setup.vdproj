@@ -27,12 +27,6 @@
         }
         "Entry"
         {
-        "MsmKey" = "8:_115C00FE6B47CE86833DB7759BFF7143"
-        "OwnerKey" = "8:_D1DDB1ABDEB94435B097806D448DF4B8"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_1713C12C601A16D2AD245AB6BA383F87"
         "OwnerKey" = "8:_D0120104356216F5B971D0FDA9EE8E41"
         "MsmSig" = "8:_UNDEFINED"
@@ -94,6 +88,12 @@
         "Entry"
         {
         "MsmKey" = "8:_4846DAF54DD240A895F492636EE97BAE"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_53C90D3E21F546209254B1A7335B55D1"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -279,12 +279,6 @@
         }
         "Entry"
         {
-        "MsmKey" = "8:_D1DDB1ABDEB94435B097806D448DF4B8"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_D39F2C7D533F4B099FD8ED2172E42267"
         "OwnerKey" = "8:_4846DAF54DD240A895F492636EE97BAE"
         "MsmSig" = "8:_UNDEFINED"
@@ -353,12 +347,6 @@
         {
         "MsmKey" = "8:_FC8FAF38D13FECC9887F24CAE0D4BA42"
         "OwnerKey" = "8:_D39F2C7D533F4B099FD8ED2172E42267"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_D1DDB1ABDEB94435B097806D448DF4B8"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -535,62 +523,62 @@
     {
         "CustomAction"
         {
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_22D5C143188B404BB838218324036500"
+            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_0A6CA54A96884AE2881F44A8B43A06B1"
             {
-            "Name" = "8:Primary output from SetupCustomActions (Active)"
+            "Name" = "8:Primary output from ConfigUI (Active)"
             "Condition" = "8:"
-            "Object" = "8:_D1DDB1ABDEB94435B097806D448DF4B8"
-            "FileType" = "3:1"
-            "InstallAction" = "3:1"
-            "Arguments" = "8:"
-            "EntryPoint" = "8:"
-            "Sequence" = "3:1"
-            "Identifier" = "8:_55F48495_3E54_418C_8BBB_7670B34330AA"
-            "InstallerClass" = "11:TRUE"
-            "CustomActionData" = "8:"
-            "Run64Bit" = "11:TRUE"
-            }
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_25FCDE656BF644D4AC8E8985FD0D461D"
-            {
-            "Name" = "8:Primary output from SetupCustomActions (Active)"
-            "Condition" = "8:"
-            "Object" = "8:_D1DDB1ABDEB94435B097806D448DF4B8"
-            "FileType" = "3:1"
-            "InstallAction" = "3:3"
-            "Arguments" = "8:"
-            "EntryPoint" = "8:"
-            "Sequence" = "3:1"
-            "Identifier" = "8:_FDAD5468_513A_4B9F_931F_39132D97ACC5"
-            "InstallerClass" = "11:TRUE"
-            "CustomActionData" = "8:"
-            "Run64Bit" = "11:TRUE"
-            }
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_DD417A2D502A4C47B13A4377168C94AC"
-            {
-            "Name" = "8:Primary output from SetupCustomActions (Active)"
-            "Condition" = "8:"
-            "Object" = "8:_D1DDB1ABDEB94435B097806D448DF4B8"
-            "FileType" = "3:1"
+            "Object" = "8:_4846DAF54DD240A895F492636EE97BAE"
+            "FileType" = "3:2"
             "InstallAction" = "3:2"
             "Arguments" = "8:"
             "EntryPoint" = "8:"
             "Sequence" = "3:1"
-            "Identifier" = "8:_15D3E9D4_7CD4_4B2E_990B_143203FE0669"
+            "Identifier" = "8:_E3785264_308D_441E_8615_11B47702A6A4"
             "InstallerClass" = "11:TRUE"
             "CustomActionData" = "8:"
             "Run64Bit" = "11:TRUE"
             }
-            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_EE6FB168D00742EFB5EA2BE7237CB21A"
+            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_25F34C527CA54F33A450A28600C75BF0"
             {
-            "Name" = "8:Primary output from SetupCustomActions (Active)"
+            "Name" = "8:Primary output from ConfigUI (Active)"
             "Condition" = "8:"
-            "Object" = "8:_D1DDB1ABDEB94435B097806D448DF4B8"
-            "FileType" = "3:1"
+            "Object" = "8:_4846DAF54DD240A895F492636EE97BAE"
+            "FileType" = "3:2"
+            "InstallAction" = "3:3"
+            "Arguments" = "8:"
+            "EntryPoint" = "8:"
+            "Sequence" = "3:1"
+            "Identifier" = "8:_49767558_BACD_46DB_A882_20585AC7D7B3"
+            "InstallerClass" = "11:TRUE"
+            "CustomActionData" = "8:"
+            "Run64Bit" = "11:TRUE"
+            }
+            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_464BA004EA2B4DAAAA620CC08C9DC57F"
+            {
+            "Name" = "8:Primary output from ConfigUI (Active)"
+            "Condition" = "8:"
+            "Object" = "8:_4846DAF54DD240A895F492636EE97BAE"
+            "FileType" = "3:2"
+            "InstallAction" = "3:1"
+            "Arguments" = "8:"
+            "EntryPoint" = "8:"
+            "Sequence" = "3:1"
+            "Identifier" = "8:_C574B650_7D25_4BD7_96EB_0FCE3BBBA943"
+            "InstallerClass" = "11:TRUE"
+            "CustomActionData" = "8:"
+            "Run64Bit" = "11:TRUE"
+            }
+            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_F324483DB9974FBC83EE75926BCD0FA0"
+            {
+            "Name" = "8:Primary output from ConfigUI (Active)"
+            "Condition" = "8:"
+            "Object" = "8:_4846DAF54DD240A895F492636EE97BAE"
+            "FileType" = "3:2"
             "InstallAction" = "3:4"
             "Arguments" = "8:"
             "EntryPoint" = "8:"
             "Sequence" = "3:1"
-            "Identifier" = "8:_47589F21_A4B1_47AC_9265_E2CCE58F0F0E"
+            "Identifier" = "8:_80474F30_D2DF_4543_A670_2EEEF9C7CE61"
             "InstallerClass" = "11:TRUE"
             "CustomActionData" = "8:"
             "Run64Bit" = "11:TRUE"
@@ -791,6 +779,26 @@
             "Register" = "3:1"
             "Exclude" = "11:FALSE"
             "IsDependency" = "11:TRUE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_53C90D3E21F546209254B1A7335B55D1"
+            {
+            "SourcePath" = "8:..\\THIRD_PARTY"
+            "TargetName" = "8:THIRD_PARTY"
+            "Tag" = "8:"
+            "Folder" = "8:_5B75DEFBD6F54FBE9D37471984D62D5E"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
             "IsolateTo" = "8:"
             }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_6226D20699DE34340E2DC038BBECEC59"
@@ -1477,7 +1485,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:OpenXR-NIS-Scaler"
         "ProductCode" = "8:{BC86E39D-FF1D-47E9-9F22-3586B0EB733A}"
-        "PackageCode" = "8:{10770C6C-D40E-4575-A22A-16DA5FD21D79}"
+        "PackageCode" = "8:{BA6E1648-9700-4A94-B993-EAC6E20E7A39}"
         "UpgradeCode" = "8:{DE3B4392-8473-4208-A77F-812E54E09AE6}"
         "AspNetVersion" = "8:"
         "RestartWWWService" = "11:FALSE"
@@ -2129,7 +2137,7 @@
         {
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_4846DAF54DD240A895F492636EE97BAE"
             {
-            "SourcePath" = "8:..\\ConfigUI\\obj\\Release\\ConfigUI.exe"
+            "SourcePath" = "8:..\\ConfigUI\\obj\\Debug\\ConfigUI.exe"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_60C0EEEB6A2641928AA6D0B68DE7F13C"
@@ -2157,7 +2165,7 @@
             }
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_5B32C3205FBA4808BD5B7F3B1F3E6194"
             {
-            "SourcePath" = "8:..\\x64\\Release\\XR_APILAYER_NOVENDOR_nis_scaler.dll"
+            "SourcePath" = "8:..\\x64\\Debug\\XR_APILAYER_NOVENDOR_nis_scaler.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_5B75DEFBD6F54FBE9D37471984D62D5E"
@@ -2206,34 +2214,6 @@
             "OutputConfiguration" = "8:"
             "OutputGroupCanonicalName" = "8:ContentFiles"
             "OutputProjectGuid" = "8:{92E50B91-2FA3-48A0-B7F7-E04D7790E15B}"
-            "ShowKeyOutput" = "11:TRUE"
-                "ExcludeFilters"
-                {
-                }
-            }
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_D1DDB1ABDEB94435B097806D448DF4B8"
-            {
-            "SourcePath" = "8:SetupCustomActions\\obj\\Release\\SetupCustomActions.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_4F896B3BCD4849B5BAD17B6347F9889A"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            "ProjectOutputGroupRegister" = "3:1"
-            "OutputConfiguration" = "8:"
-            "OutputGroupCanonicalName" = "8:Built"
-            "OutputProjectGuid" = "8:{8B1CBD30-F977-468E-B322-4ECAE47A9515}"
             "ShowKeyOutput" = "11:TRUE"
                 "ExcludeFilters"
                 {
