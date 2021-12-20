@@ -763,15 +763,14 @@ float4 psMain(in float4 position : SV_POSITION, in float2 texcoord : TEXCOORD0) 
                         resources.bilinearScaler->update(createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
                     std::vector<std::string> shaderHome;
-                    shaderHome.push_back(nisShaderHome);
                     if (config.scaleFactor < 1.f)
                     {
-                        resources.NISScaler = std::make_shared<NVScaler>(deviceResources, shaderHome);
+                        resources.NISScaler = std::make_shared<NVScaler>(deviceResources, nisShaderHome);
                         resources.NISScaler->update(config.sharpness, createInfo->width, createInfo->height, actualDisplayWidth, actualDisplayHeight);
                     }
                     else
                     {
-                        resources.NISSharpen = std::make_shared<NVSharpen>(deviceResources, shaderHome);
+                        resources.NISSharpen = std::make_shared<NVSharpen>(deviceResources, nisShaderHome);
                         resources.NISSharpen->update(config.sharpness, createInfo->width, createInfo->height);
                     }
 
